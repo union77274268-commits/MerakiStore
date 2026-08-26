@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Meraki — Take Meraki With You</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
 <style>
   @font-face {
     font-family: 'SuperAdorable';
@@ -392,7 +394,7 @@
   window.addEventListener('resize', fitToScreen);
   window.addEventListener('orientationchange', fitToScreen);
 
-  // PWA install button — preserves the existing UI.
+  // PWA install button — native browser prompt.
   let deferredInstallPrompt = null;
   const installButton = document.getElementById('installBtn');
 
@@ -402,6 +404,12 @@
 
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
+  // Register the root service worker so /install/ is controlled too.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  }
+
+  // Chrome/Edge provides this event only when the PWA is installable.
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     deferredInstallPrompt = event;
@@ -418,20 +426,22 @@
         const promptEvent = deferredInstallPrompt;
         deferredInstallPrompt = null;
 
-        await promptEvent.prompt();
-        await promptEvent.userChoice;
+        try {
+          await promptEvent.prompt();
+          await promptEvent.userChoice;
+        } catch (_) {}
         return;
       }
 
-      // iOS does not expose beforeinstallprompt.
+      // iOS intentionally has no programmatic install prompt.
       if (isIOS) {
-        alert('To install Meraki: tap Share in Safari, then choose “Add to Home Screen”.');
+        window.alert('To install Meraki, tap Share in Safari and choose “Add to Home Screen”.');
         return;
       }
 
-      // Chrome/Android may not expose the prompt when install
-      // requirements are not currently satisfied.
-      alert('If the install prompt does not appear, open your browser menu and choose “Install app” or “Add to Home screen”.');
+      // No website can force-open Chrome's three-dot menu.
+      // The native prompt will appear automatically whenever Chrome
+      // exposes beforeinstallprompt on this page.
     });
   }
 
