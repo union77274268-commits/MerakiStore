@@ -280,6 +280,64 @@
     .brand-title { margin-top: 0; }
   }
 </style>
+
+<style>
+.install-help-overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  background:rgba(18,25,48,.58);
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+.install-help-card{
+  width:min(420px,100%);
+  background:#fff;
+  border-radius:26px;
+  padding:25px 22px 21px;
+  box-shadow:0 20px 55px rgba(20,25,55,.25);
+  text-align:center;
+}
+.install-help-icon{
+  width:62px;height:62px;border-radius:18px;
+  margin:0 auto 13px;
+  display:grid;place-items:center;
+  background:#f1eaff;color:#7137d7;font-size:29px;
+}
+.install-help-card h3{
+  margin:0 0 8px;
+  color:#172650;
+  font-family:'Nunito',sans-serif;
+  font-size:21px;
+  font-weight:900;
+}
+.install-help-card p{
+  margin:0 auto 17px;
+  color:#697185;
+  font:600 14px/1.5 'Nunito',sans-serif;
+}
+.install-help-close{
+  border:0;
+  width:100%;
+  height:48px;
+  border-radius:15px;
+  color:#fff;
+  background:linear-gradient(100deg,#7037d9,#f52e76);
+  font:900 16px 'Nunito',sans-serif;
+}
+.install-help-step{
+  display:inline-block;
+  padding:7px 12px;
+  margin:3px;
+  border-radius:12px;
+  background:#f7f3ff;
+  color:#7137d7;
+  font:800 13px 'Nunito',sans-serif;
+}
+</style>
+
 </head>
 <body>
 
@@ -394,7 +452,7 @@
   window.addEventListener('resize', fitToScreen);
   window.addEventListener('orientationchange', fitToScreen);
 
-  // PWA install button — native browser prompt.
+  // PWA install button — browser-aware installation.
   let deferredInstallPrompt = null;
   const installButton = document.getElementById('installBtn');
 
@@ -402,17 +460,44 @@
     window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true;
 
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const ua = navigator.userAgent;
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+  const isSamsung = /samsungbrowser/i.test(ua);
+  const isFirefox = /firefox/i.test(ua) && !isSamsung;
 
-  // Register the root service worker so /install/ is controlled too.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
   }
 
-  // Chrome/Edge provides this event only when the PWA is installable.
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     deferredInstallPrompt = event;
+  });
+
+  const helpOverlay = document.getElementById('installHelpOverlay');
+  const helpTitle = document.getElementById('installHelpTitle');
+  const helpText = document.getElementById('installHelpText');
+  const helpSteps = document.getElementById('installHelpSteps');
+  const helpClose = document.getElementById('installHelpClose');
+
+  function showInstallHelp(title, text, steps) {
+    helpTitle.textContent = title;
+    helpText.textContent = text;
+    helpSteps.innerHTML = steps.map(step =>
+      '<span class="install-help-step">' + step + '</span>'
+    ).join('');
+    helpOverlay.style.display = 'flex';
+    helpOverlay.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeInstallHelp() {
+    helpOverlay.style.display = 'none';
+    helpOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  helpClose.addEventListener('click', closeInstallHelp);
+  helpOverlay.addEventListener('click', (e) => {
+    if (e.target === helpOverlay) closeInstallHelp();
   });
 
   if (installButton) {
@@ -422,10 +507,10 @@
         return;
       }
 
+      // Android Chrome / Chromium browsers with native install support.
       if (deferredInstallPrompt) {
         const promptEvent = deferredInstallPrompt;
         deferredInstallPrompt = null;
-
         try {
           await promptEvent.prompt();
           await promptEvent.userChoice;
@@ -433,15 +518,42 @@
         return;
       }
 
-      // iOS intentionally has no programmatic install prompt.
+      // iPhone/iPad Safari.
       if (isIOS) {
-        window.alert('To install Meraki, tap Share in Safari and choose “Add to Home Screen”.');
+        showInstallHelp(
+          'Install Meraki on iPhone',
+          'Open this page in Safari, then use the Share menu to add Meraki to your Home Screen.',
+          ['1  Tap Share  ↗', '2  Add to Home Screen', '3  Tap Add']
+        );
         return;
       }
 
-      // No website can force-open Chrome's three-dot menu.
-      // The native prompt will appear automatically whenever Chrome
-      // exposes beforeinstallprompt on this page.
+      // Firefox Android.
+      if (isFirefox) {
+        showInstallHelp(
+          'Add Meraki to your Home Screen',
+          'Firefox does not provide the same native install popup. Use the browser menu to add Meraki to your Home Screen.',
+          ['1  Tap ⋮', '2  Add to Home screen', '3  Tap Add']
+        );
+        return;
+      }
+
+      // Samsung Internet.
+      if (isSamsung) {
+        showInstallHelp(
+          'Add Meraki to your Home Screen',
+          'Samsung Internet does not provide the same native install popup. Use its menu to add Meraki to your Home Screen.',
+          ['1  Tap ☰', '2  Add page to', '3  Home screen']
+        );
+        return;
+      }
+
+      // Other browsers.
+      showInstallHelp(
+        'Install Meraki',
+        'Use your browser menu to add Meraki to your Home Screen. It will open like an app.',
+        ['Open browser menu', 'Add to Home screen', 'Tap Add']
+      );
     });
   }
 
@@ -450,6 +562,17 @@
   });
 
 </script>
+
+
+<div class="install-help-overlay" id="installHelpOverlay" aria-hidden="true">
+  <div class="install-help-card" role="dialog" aria-modal="true">
+    <div class="install-help-icon">📲</div>
+    <h3 id="installHelpTitle">Install Meraki</h3>
+    <p id="installHelpText"></p>
+    <div id="installHelpSteps"></div>
+    <button class="install-help-close" id="installHelpClose" type="button">Got it</button>
+  </div>
+</div>
 
 </body>
 </html>
