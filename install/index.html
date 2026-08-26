@@ -1,1 +1,122 @@
-hello
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<title>Install Meraki — Stationery & Toys</title>
+<style>
+:root{--ink:#17233f;--muted:#68728a;--purple:#6d35c8;--pink:#f05a8a;--blue:#42a5f5;--line:#ece9e4;--bg:#fffdf9}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at 8% 12%,#ffe7ef 0 55px,transparent 56px),radial-gradient(circle at 92% 18%,#e6f7ed 0 70px,transparent 71px),radial-gradient(circle at 88% 88%,#fff1bd 0 85px,transparent 86px),var(--bg);min-height:100vh}
+.wrap{width:min(1080px,calc(100% - 32px));margin:auto}header{display:flex;align-items:center;justify-content:space-between;padding:22px 0}.logo{display:flex;gap:10px;align-items:center;text-decoration:none;color:var(--ink)}.logo-mark{width:48px;height:48px;border-radius:15px;background:#f3edff;display:grid;place-items:center;color:var(--purple);font-size:26px;font-weight:900}.logo-name{font-size:21px;font-weight:900;line-height:1}.logo-sub{font-size:10px;font-weight:800;letter-spacing:.08em;color:#7b8291;margin-top:3px}.badge{background:#eef9f3;color:#21865a;border:1px solid #d9f0e4;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:800}
+main{padding:38px 0 60px}.hero{text-align:center;max-width:760px;margin:auto}.kicker{display:inline-flex;background:#f3edff;color:var(--purple);padding:8px 13px;border-radius:999px;font-size:12px;font-weight:850}h1{font-size:clamp(38px,7vw,68px);line-height:.98;letter-spacing:-.055em;margin:18px 0 14px}.gradient{background:linear-gradient(90deg,var(--pink),var(--purple),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}.hero>p{font-size:18px;line-height:1.6;color:var(--muted);max-width:620px;margin:auto}
+.install-card{margin:34px auto 0;max-width:620px;background:#fff;border:1px solid var(--line);border-radius:28px;padding:26px;box-shadow:0 18px 55px #17233f12}.app-icon{width:104px;height:104px;border-radius:26px;object-fit:cover;display:block;margin:0 auto 17px;box-shadow:0 10px 30px #17233f18}.install-btn{border:0;width:100%;min-height:56px;border-radius:17px;background:var(--purple);color:#fff;font-size:16px;font-weight:900;cursor:pointer}.status{margin-top:13px;color:var(--muted);font-size:13px;line-height:1.5}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:38px auto 0;max-width:860px}.step{background:#fff;border:1px solid var(--line);border-radius:22px;padding:20px;text-align:left}.num{width:34px;height:34px;border-radius:11px;background:#f3edff;color:var(--purple);display:grid;place-items:center;font-weight:900;margin-bottom:14px}.step h3{font-size:15px;margin:0 0 6px}.step p{font-size:13px;line-height:1.5;color:var(--muted);margin:0}.ios{display:none;margin:20px auto 0;max-width:620px;background:#fff;border:1px solid var(--line);border-radius:22px;padding:20px;text-align:left}.ios p{margin:7px 0 0;color:var(--muted);font-size:14px;line-height:1.55}footer{text-align:center;color:#8a91a0;font-size:12px;padding:10px 0 28px}
+@media(max-width:680px){.wrap{width:calc(100% - 22px)}header{padding:15px 0}.badge{font-size:11px;padding:7px 9px}main{padding:25px 0 40px}h1{font-size:43px}.hero>p{font-size:15px}.install-card{padding:21px;border-radius:24px}.steps{grid-template-columns:1fr;gap:10px;margin-top:24px}.step{padding:16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><a class="logo" href="/" aria-label="Meraki Stationery & Toys"><div class="logo-mark">M</div><div><div class="logo-name">Meraki</div><div class="logo-sub">STATIONERY & TOYS</div></div></a><div class="badge">● Official App</div></header>
+<main><section class="hero">
+<div class="kicker">✨ Shop faster. Shop happier.</div>
+<h1>Take <span class="gradient">Meraki</span><br>with you.</h1>
+<p>Install the Meraki Stationery & Toys app for a faster, smoother shopping experience right from your phone.</p>
+<div class="install-card"><img class="app-icon" src="/icons/icon-512.png" alt="Meraki app icon" onerror="this.style.display='none'"><button id="installBtn" class="install-btn" type="button">Install Meraki App</button><div id="status" class="status">Fast access to stationery, toys, art & craft, and more.</div></div>
+<div id="iosHelp" class="ios"><strong>🍎 Install on iPhone</strong><p>Open this page in Safari, tap <b>Share</b>, then choose <b>Add to Home Screen</b>. After adding it, Meraki opens like an app.</p></div>
+</section>
+<section class="steps"><div class="step"><div class="num">1</div><h3>Open Meraki</h3><p>You're on the official Meraki installation page.</p></div><div class="step"><div class="num">2</div><h3>Install the app</h3><p>Tap install when your browser offers the native installation prompt.</p></div><div class="step"><div class="num">3</div><h3>Start shopping</h3><p>Find Meraki on your home screen and open the store anytime.</p></div></section></main>
+<footer>Meraki Stationery & Toys · Your everyday stationery & toy store</footer>
+</div>
+<script>
+let deferredPrompt = null;
+const btn = document.getElementById("installBtn");
+const status = document.getElementById("status");
+const ios = document.getElementById("iosHelp");
+
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isStandalone =
+  window.matchMedia("(display-mode: standalone)").matches ||
+  window.navigator.standalone === true;
+
+if (isStandalone) {
+  btn.textContent = "Open Meraki Store";
+  status.textContent = "Meraki is already installed on this device.";
+  btn.onclick = () => location.href = "/";
+}
+
+/*
+  Chrome/Edge/other Chromium browsers fire this event when the
+  current site is eligible for installation. We save the event
+  because it can only be triggered by a real user gesture later.
+*/
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredPrompt = event;
+
+  btn.disabled = false;
+  btn.textContent = "Install Meraki App";
+  status.textContent = "Tap the button to install Meraki.";
+});
+
+/*
+  The actual native Chrome "Install app?" prompt is triggered here.
+  This must happen directly from the user's tap.
+*/
+btn.addEventListener("click", async () => {
+  if (isStandalone) {
+    location.href = "/";
+    return;
+  }
+
+  if (deferredPrompt) {
+    const promptEvent = deferredPrompt;
+    deferredPrompt = null;
+
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+
+      if (choice.outcome === "accepted") {
+        status.textContent = "Installing Meraki…";
+      } else {
+        status.textContent = "Installation cancelled. Tap Install Meraki App to try again.";
+      }
+    } catch (error) {
+      deferredPrompt = promptEvent;
+      status.textContent = "Chrome could not open the install prompt. Try again.";
+    }
+    return;
+  }
+
+  if (isIOS) {
+    ios.style.display = "block";
+    status.textContent = "On iPhone, use Safari → Share → Add to Home Screen.";
+    return;
+  }
+
+  /*
+    If this branch is reached, Chrome has not supplied the native
+    install event. This normally means the PWA is not currently
+    considered installable, or the browser has already dismissed
+    the prompt recently.
+  */
+  status.textContent =
+    'The browser has not enabled the install prompt yet. Open the browser menu and choose "Install app".';
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredPrompt = null;
+  status.textContent = "Meraki was installed successfully.";
+  btn.textContent = "Open Meraki Store";
+  btn.onclick = () => location.href = "/";
+});
+
+if (isIOS && !isStandalone) {
+  ios.style.display = "block";
+  status.textContent =
+    "On iPhone, open this page in Safari and use Share → Add to Home Screen.";
+}
+</script>
+</body></html>
