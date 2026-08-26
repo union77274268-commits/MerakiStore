@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Meraki — Take Meraki With You</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -280,7 +280,6 @@
     .brand-title { margin-top: 0; }
   }
 </style>
-
 </head>
 <body>
 
@@ -395,21 +394,17 @@
   window.addEventListener('resize', fitToScreen);
   window.addEventListener('orientationchange', fitToScreen);
 
-  // PWA install button — browser-aware installation.
+  // --- Meraki PWA installation ---
   let deferredInstallPrompt = null;
-  const installButton = document.getElementById('installBtn');
-
-  const isStandalone =
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true;
-
-  const ua = navigator.userAgent;
-  const isIOS = /iphone|ipad|ipod/i.test(ua);
-  const isSamsung = /samsungbrowser/i.test(ua);
-  const isFirefox = /firefox/i.test(ua) && !isSamsung;
+  const installBtn = document.getElementById('installBtn');
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isSamsung = /SamsungBrowser/i.test(ua);
+  const isFirefox = /Firefox/i.test(ua) && !isSamsung;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    navigator.serviceWorker.register('/sw.js', {scope:'/'}).catch(() => {});
   }
 
   window.addEventListener('beforeinstallprompt', (event) => {
@@ -417,95 +412,42 @@
     deferredInstallPrompt = event;
   });
 
-  const helpOverlay = document.getElementById('installHelpOverlay');
-  const helpTitle = document.getElementById('installHelpTitle');
-  const helpText = document.getElementById('installHelpText');
-  const helpSteps = document.getElementById('installHelpSteps');
-  const helpClose = document.getElementById('installHelpClose');
-
-  function showInstallHelp(title, text, steps) {
-    helpTitle.textContent = title;
-    helpText.textContent = text;
-    helpSteps.innerHTML = steps.map(step =>
-      '<span class="install-help-step">' + step + '</span>'
-    ).join('');
-    helpOverlay.style.display = 'flex';
-    helpOverlay.setAttribute('aria-hidden', 'false');
+  function showInstallHelp(title, text) {
+    const old = document.getElementById('merakiInstallHelp');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'merakiInstallHelp';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(23,38,80,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:Arial,sans-serif;';
+    overlay.innerHTML = '<div style="width:min(390px,100%);background:#fff;border-radius:24px;padding:24px 20px;text-align:center;box-shadow:0 20px 55px rgba(23,38,80,.25)"><div style="font-size:30px;margin-bottom:10px">📲</div><div style="font-size:20px;font-weight:800;color:#172650;margin-bottom:8px">'+title+'</div><div style="font-size:14px;line-height:1.5;color:#697185;margin-bottom:18px">'+text+'</div><button id="merakiHelpClose" style="width:100%;height:48px;border:0;border-radius:15px;color:#fff;background:linear-gradient(100deg,#7037d9,#f52e76);font-size:16px;font-weight:800">Got it</button></div>';
+    document.body.appendChild(overlay);
+    document.getElementById('merakiHelpClose').onclick = () => overlay.remove();
+    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
   }
 
-  function closeInstallHelp() {
-    helpOverlay.style.display = 'none';
-    helpOverlay.setAttribute('aria-hidden', 'true');
-  }
+  installBtn.addEventListener('click', async () => {
+    if (isStandalone) { window.location.href = '/'; return; }
 
-  helpClose.addEventListener('click', closeInstallHelp);
-  helpOverlay.addEventListener('click', (e) => {
-    if (e.target === helpOverlay) closeInstallHelp();
+    // Chrome/Chromium: native install dialog.
+    if (deferredInstallPrompt) {
+      const promptEvent = deferredInstallPrompt;
+      deferredInstallPrompt = null;
+      try { await promptEvent.prompt(); await promptEvent.userChoice; } catch (_) {}
+      return;
+    }
+
+    if (isIOS) {
+      showInstallHelp('Install Meraki on iPhone','Open this page in Safari, tap Share, then choose “Add to Home Screen”.');
+    } else if (isFirefox) {
+      showInstallHelp('Add Meraki to Home Screen','Tap Firefox ⋮ and choose “Add to Home screen”. The shortcut will open Meraki like an app.');
+    } else if (isSamsung) {
+      showInstallHelp('Add Meraki to Home Screen','Tap Samsung Internet ☰ → Add page to → Home screen. The shortcut will open Meraki like an app.');
+    } else {
+      showInstallHelp('Install Meraki','Open your browser menu and choose “Install app” or “Add to Home screen”.');
+    }
   });
 
-  if (installButton) {
-    installButton.addEventListener('click', async () => {
-      if (isStandalone) {
-        window.location.href = '/';
-        return;
-      }
-
-      // Android Chrome / Chromium browsers with native install support.
-      if (deferredInstallPrompt) {
-        const promptEvent = deferredInstallPrompt;
-        deferredInstallPrompt = null;
-        try {
-          await promptEvent.prompt();
-          await promptEvent.userChoice;
-        } catch (_) {}
-        return;
-      }
-
-      // iPhone/iPad Safari.
-      if (isIOS) {
-        showInstallHelp(
-          'Install Meraki on iPhone',
-          'Open this page in Safari, then use the Share menu to add Meraki to your Home Screen.',
-          ['1  Tap Share  ↗', '2  Add to Home Screen', '3  Tap Add']
-        );
-        return;
-      }
-
-      // Firefox Android.
-      if (isFirefox) {
-        showInstallHelp(
-          'Add Meraki to your Home Screen',
-          'Firefox does not provide the same native install popup. Use the browser menu to add Meraki to your Home Screen.',
-          ['1  Tap ⋮', '2  Add to Home screen', '3  Tap Add']
-        );
-        return;
-      }
-
-      // Samsung Internet.
-      if (isSamsung) {
-        showInstallHelp(
-          'Add Meraki to your Home Screen',
-          'Samsung Internet does not provide the same native install popup. Use its menu to add Meraki to your Home Screen.',
-          ['1  Tap ☰', '2  Add page to', '3  Home screen']
-        );
-        return;
-      }
-
-      // Other browsers.
-      showInstallHelp(
-        'Install Meraki',
-        'Use your browser menu to add Meraki to your Home Screen. It will open like an app.',
-        ['Open browser menu', 'Add to Home screen', 'Tap Add']
-      );
-    });
-  }
-
-  window.addEventListener('appinstalled', () => {
-    deferredInstallPrompt = null;
-  });
-
+  window.addEventListener('appinstalled', () => { deferredInstallPrompt = null; });
 </script>
-
 
 </body>
 </html>
