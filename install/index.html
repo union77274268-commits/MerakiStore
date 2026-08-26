@@ -119,4 +119,9 @@ if (isIOS && !isStandalone) {
     "On iPhone, open this page in Safari and use Share → Add to Home Screen.";
 }
 </script>
+  <script>
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" });
+}
+  </script>
 </body></html>
