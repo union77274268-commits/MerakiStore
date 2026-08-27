@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Meraki — Take Meraki With You</title>
-<link rel="manifest" href="./manifest.json">
+<link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#6a2cbe">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
 <style>
   @font-face {
     font-family: 'SuperAdorable';
@@ -37,12 +37,14 @@
   .screen {
     position: relative;
     height: 100dvh;
+    min-height: 100vh;
     width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     background: #fdfaf6;
     padding: 2.2vh 4vw 1.5vh;
   }
@@ -124,9 +126,10 @@
     background: #fff;
     border-radius: 22px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-    width: 100%;
+    width: calc(100% - 24px);
+    max-width: 420px;
     padding: 1.8vh 5vw;
-    margin-top: 1.6vh;
+    margin: 1.6vh auto 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -499,16 +502,22 @@
   function fitToScreen() {
     const content = document.getElementById('content');
     const screen = document.querySelector('.screen');
+    const footer = document.querySelector('.footer-bar');
+    const CONTENT_MAX_WIDTH = 480; // must match .content max-width in CSS
     content.style.transform = 'scale(1)';
     content.style.width = '100%';
+    content.style.maxWidth = CONTENT_MAX_WIDTH + 'px';
     requestAnimationFrame(() => {
-      const contentHeight = content.scrollHeight;
-      const availableHeight = screen.clientHeight;
-      const availableWidth = screen.clientWidth;
-      const scale = availableHeight / contentHeight;
+      // measure the true natural height by using the last element's offset,
+      // since getBoundingClientRect() on a scaled flex container can under-report
+      const contentTop = content.getBoundingClientRect().top;
+      const footerBottom = footer.getBoundingClientRect().bottom;
+      const contentHeight = footerBottom - contentTop;
+      const availableHeight = screen.clientHeight - contentTop - 20; // account for top offset + buffer
+      const availableWidth = Math.min(screen.clientWidth, CONTENT_MAX_WIDTH);
+      const scale = Math.min(availableHeight / contentHeight, 1);
       content.style.transform = `scale(${scale})`;
       content.style.transformOrigin = 'center center';
-      // recompute width so it stays centered after scaling
       content.style.width = (availableWidth / scale) + 'px';
       content.style.maxWidth = 'none';
     });
@@ -516,11 +525,31 @@
   window.addEventListener('load', fitToScreen);
   window.addEventListener('resize', fitToScreen);
   window.addEventListener('orientationchange', fitToScreen);
+  // Re-fit once fonts finish loading (custom font metrics can shift layout height)
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      fitToScreen();
+      setTimeout(fitToScreen, 150);
+      setTimeout(fitToScreen, 500);
+    });
+  } else {
+    setTimeout(fitToScreen, 300);
+    setTimeout(fitToScreen, 700);
+  }
+  // Final safety pass once the logo image itself has fully decoded
+  const logoImg = document.querySelector('.logo-wrap img');
+  if (logoImg) {
+    if (logoImg.complete) {
+      fitToScreen();
+    } else {
+      logoImg.addEventListener('load', fitToScreen);
+    }
+  }
 
   // ---------- Service Worker registration ----------
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
     });
   }
 
