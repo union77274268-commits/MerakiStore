@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Quicksand:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -277,7 +278,7 @@ function AppProvider({children}){
   const [orders, setOrders] = useLocalState('meraki_orders', []);
   const [address, setAddress] = useLocalState('meraki_address', {
     name:'Prashant Punia', phone:'8302416181', email:'prashant@example.com', line1:'Shop No. LG-06, Below HDFC Bank',
-    area:'Mansarovar', landmark:'Near HDFC Bank', pincode:'302021', city:'Jaipur', instructions:''
+    area:'Kalwar Road', landmark:'Near HDFC Bank', pincode:'302012', city:'Jaipur', instructions:''
   });
   const [deliveryType, setDeliveryType] = useLocalState('meraki_delivery_type','home');
   const [paymentMethod, setPaymentMethod] = useLocalState('meraki_payment_method','cod');
@@ -587,10 +588,6 @@ function ProductCard({product}){
           <ProductImg product={product} className="w-full aspect-square text-4xl mb-2" />
           {product.tags.includes('bestseller') && <div className="absolute top-3 left-3"><Badge tone="amber">Bestseller</Badge></div>}
         </a>
-        <button aria-label="Quick buy" onClick={quickBuy} title="Quick Buy"
-          className="absolute bottom-4 right-1.5 w-8 h-8 rounded-full bg-[var(--purple)] text-white shadow-lg flex items-center justify-center focus-ring hover:scale-110 transition-transform">
-          <Icon.Bolt />
-        </button>
       </div>
       <a href={"#/product/"+product.id} className="block">
         <div className="text-[13px] font-semibold leading-snug line-clamp-2 min-h-[34px]">{product.name}</div>
@@ -605,15 +602,21 @@ function ProductCard({product}){
         <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>
         <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>
       </div>
-      <div className="mt-2">
-        {!line ? (
-          <button onClick={()=>addToCart(product.id,1)}
-            className="btn-primary w-full py-1.5 text-sm flex items-center justify-center gap-1 focus-ring">
-            <span>+</span> Add
-          </button>
-        ) : (
-          <div className="w-full flex justify-center"><QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} small /></div>
-        )}
+      <div className="mt-2 flex gap-1.5 items-center">
+        <div className="flex-1">
+          {!line ? (
+            <button onClick={()=>addToCart(product.id,1)}
+              className="btn-primary w-full py-1.5 text-sm flex items-center justify-center gap-1 focus-ring">
+              <span>+</span> Add
+            </button>
+          ) : (
+            <div className="w-full flex justify-center"><QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} small /></div>
+          )}
+        </div>
+        <button aria-label="Quick buy" onClick={quickBuy} title="Quick Buy"
+          className="w-8 h-8 flex-shrink-0 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring hover:bg-[var(--purple)] hover:text-white transition-colors">
+          <Icon.Bolt />
+        </button>
       </div>
     </div>
   );
@@ -734,15 +737,16 @@ function MobileHeader({route}){
 }
 
 const PIN_TO_AREA = {
-  '302021':'Mansarovar', '302001':'Chandpole Bazaar', '302015':'Malviya Nagar',
-  '302017':'C-Scheme', '302012':'Vaishali Nagar', '302020':'Sanganer',
-  '302029':'Jagatpura', '302004':'Raja Park', '302018':'Jawahar Nagar', '302033':'Pratap Nagar',
+  '302012':'Kalwar Road', '302020':'Mansarovar', '302021':'Vaishali Nagar',
+  '302017':'Malviya Nagar', '302029':'Sanganer', '302001':'Jaipur City',
+  '302006':'Civil Lines', '302023':'Vidhyadhar Nagar', '302028':'Amer', '302011':'Sanganer (Airport)',
 };
+const isServiceablePin = (pin)=> /^\d{6}$/.test(pin) && Boolean(PIN_TO_AREA[pin]);
 
 function DeliveryStrip(){
   const {address} = useApp();
   const [changing, setChanging] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useLocalState('meraki_delivery_strip_dismissed', false);
   const [closing, setClosing] = useState(false);
   const requestDismiss = ()=>{
     setClosing(true);
@@ -774,8 +778,11 @@ function ChangeLocationModal({onClose}){
   const [area, setArea] = useState(address.area);
   const [autoDetected, setAutoDetected] = useState(false);
 
+  const isComplete = /^\d{6}$/.test(pin);
+  const serviceable = isServiceablePin(pin);
+
   useEffect(()=>{
-    if(/^\d{6}$/.test(pin) && PIN_TO_AREA[pin]){
+    if(isComplete && PIN_TO_AREA[pin]){
       setArea(PIN_TO_AREA[pin]);
       setAutoDetected(true);
     } else {
@@ -790,7 +797,7 @@ function ChangeLocationModal({onClose}){
           <label className="text-xs font-semibold text-[var(--muted)]">PIN Code</label>
           <div className="relative mt-1">
             <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,'').slice(0,6))}
-              className="w-full border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm focus-ring" />
+              className={"w-full border rounded-lg pl-3 pr-9 py-2 text-sm focus-ring "+(isComplete && !serviceable ? 'border-[var(--danger)]' : 'border-[var(--line)]')} />
             {pin && (
               <button aria-label="Clear PIN code" onClick={()=>{setPin(''); setAutoDetected(false);}}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--ink)] w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/5 focus-ring">
@@ -798,15 +805,20 @@ function ChangeLocationModal({onClose}){
               </button>
             )}
           </div>
+          {isComplete && !serviceable && (
+            <div className="text-xs text-[var(--danger)] font-semibold mt-1.5 flex items-center gap-1">🚫 Sorry, we don't deliver to this PIN code yet. We currently serve Jaipur only.</div>
+          )}
         </div>
         <div>
           <label className="text-xs font-semibold text-[var(--muted)] flex items-center gap-1.5">
             Area {autoDetected && <span className="text-[var(--green)] font-bold">· Auto-detected ✨</span>}
           </label>
-          <input value={area} onChange={e=>{setArea(e.target.value); setAutoDetected(false);}} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          <input value={area} onChange={e=>{setArea(e.target.value); setAutoDetected(false);}} disabled={isComplete && !serviceable}
+            className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring disabled:bg-gray-50 disabled:text-gray-400" />
         </div>
         <button onClick={()=>{ setAddress({...address, pincode:pin, area:area}); onClose(); }}
-          className="btn-primary w-full py-2.5 focus-ring">Save Location</button>
+          disabled={!serviceable}
+          className="btn-primary w-full py-2.5 focus-ring">{serviceable ? 'Save Location' : 'Not Serviceable'}</button>
       </div>
     </Modal>
   );
@@ -816,7 +828,7 @@ function MobileFooterCompact(){
   return (
     <div className="mt-5 pt-5 border-t border-[var(--line)]">
       <div className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wide mb-2">Our Store</div>
-      <div className="text-xs text-[var(--muted)] leading-relaxed">Shop No. LG-06, Below HDFC Bank, Mansarovar, Jaipur — 302021</div>
+      <div className="text-xs text-[var(--muted)] leading-relaxed">Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur — 302012</div>
       <div className="text-xs text-[var(--muted)] mt-1">📞 8302416181 · 10:00 AM – 9:30 PM</div>
       <div className="flex gap-3 mt-3 text-lg">
         <a href="https://wa.me/918302416181" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className="focus-ring">💬</a>
@@ -836,7 +848,7 @@ function MobileMenu({open, onClose}){
     {label:'My Orders', href:'#/orders', icon:'📦'},
     {label:'Account', href:'#/account', icon:'👤'},
   ];
-  return (
+  return ReactDOM.createPortal(
     <div className={"fixed inset-0 z-50 flex "+(open?'':'pointer-events-none')}>
       <div className={"absolute inset-0 bg-black/40 transition-opacity duration-300 "+(open?'opacity-100':'opacity-0')} onClick={onClose}></div>
       <div className={"relative bg-white w-72 max-w-[80%] h-full p-5 shadow-2xl overflow-y-auto transition-transform duration-[350ms] ease-[cubic-bezier(.22,.9,.32,1)] "+(open?'translate-x-0':'-translate-x-full')}>
@@ -853,7 +865,8 @@ function MobileMenu({open, onClose}){
         </div>
         <div className="mobile-only"><MobileFooterCompact /></div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -929,7 +942,7 @@ function Modal({onClose, title, children}){
 
   const visible = mounted && !closing;
 
-  return (
+  return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center">
       <div className={"absolute inset-0 bg-black/40 transition-opacity duration-300 "+(visible?'opacity-100':'opacity-0')} onClick={requestClose}></div>
       <div className={"relative bg-white w-full md:w-[420px] md:rounded-2xl rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto transition-all duration-300 ease-[cubic-bezier(.22,.9,.32,1)] "+
@@ -940,7 +953,8 @@ function Modal({onClose, title, children}){
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1026,7 +1040,7 @@ function Footer(){
         </div>
         <div>
           <div className="font-bold text-white mb-2 text-xs uppercase tracking-wide">Our Store</div>
-          <div className="text-white/60 text-xs">Shop No. LG-06, Below HDFC Bank, Mansarovar, Jaipur — 302021</div>
+          <div className="text-white/60 text-xs">Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur — 302012</div>
           <div className="text-white/60 text-xs mt-1">📞 8302416181 · 10:00 AM – 9:30 PM</div>
         </div>
       </div>
@@ -1067,9 +1081,9 @@ function CategoryPage({route}){
   const sortLabels = {popular:'Popular', price_low:'Price: Low to High', price_high:'Price: High to Low', newest:'Newest', discount:'Discount'};
 
   return (
-    <div className="fade-in flex">
-      {/* Zepto-style left category rail */}
-      <div className="w-[76px] sm:w-[92px] flex-shrink-0 border-r border-[var(--line)] bg-white">
+    <div className="fade-in flex h-[calc(100vh-118px)] md:h-[calc(100vh-100px)] overflow-hidden">
+      {/* Zepto-style left category rail — scrolls independently */}
+      <div className="w-[72px] sm:w-[87px] flex-shrink-0 border-r border-[var(--line)] bg-white overflow-y-auto scrollbar-none h-full">
         {CATEGORIES.map(c=>{
           const active = c.id===catId;
           return (
@@ -1083,7 +1097,7 @@ function CategoryPage({route}){
         })}
       </div>
 
-      <div className="flex-1 min-w-0 px-3 md:px-6 py-3">
+      <div className="flex-1 min-w-0 px-3 md:px-6 py-3 overflow-y-auto h-full">
         <div className="hidden md:block mb-2">
           <h1 className="font-display font-bold text-2xl">{cat.icon} {cat.name}</h1>
           <div className="text-sm text-[var(--muted)]">{list.length} products</div>
@@ -1480,7 +1494,7 @@ function CheckoutAddressPage(){
           ) : (
             <div className="card p-4 text-sm">
               <div className="font-bold mb-1">Meraki Stationery &amp; Toys</div>
-              <div className="text-[var(--muted)]">Shop No. LG-06, Below HDFC Bank, Mansarovar, Jaipur — 302021</div>
+              <div className="text-[var(--muted)]">Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur — 302012</div>
               <div className="text-[var(--muted)] mt-1">🕐 Ready for pickup within 2 hrs of order confirmation.</div>
             </div>
           )}
@@ -1660,6 +1674,76 @@ function statusColor(status){
   return 'amber';
 }
 
+function downloadInvoice(order){
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = 20;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(108,63,197);
+    doc.text('Meraki Stationery & Toys', 14, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90,90,90);
+    y += 6; doc.text('Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur - 302012', 14, y);
+    y += 5; doc.text('Phone: 8302416181  ·  hello@merakistore.in', 14, y);
+
+    y += 10; doc.setDrawColor(230,225,245); doc.line(14, y, 196, y);
+    y += 10; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(30,20,50);
+    doc.text('TAX INVOICE', 14, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90,90,90);
+    doc.text('Order #'+order.id, 196, y, {align:'right'});
+
+    y += 8;
+    doc.text('Order Date: '+new Date(order.date).toLocaleString(), 14, y);
+    y += 5;
+    doc.text('Payment Method: '+(PAYMENT_LABELS[order.paymentMethod]||order.paymentMethod), 14, y);
+    y += 5;
+    doc.text('Delivery Type: '+(order.deliveryType==='home'?'Home Delivery':'Store Pickup'), 14, y);
+
+    y += 8;
+    doc.setFont('helvetica','bold'); doc.setTextColor(30,20,50); doc.text('Bill To:', 14, y);
+    doc.setFont('helvetica','normal'); doc.setTextColor(90,90,90);
+    y += 5; doc.text(order.address.name || '', 14, y);
+    y += 5; doc.text((order.address.line1||'')+', '+(order.address.area||''), 14, y);
+    y += 5; doc.text((order.address.city||'')+' - '+(order.address.pincode||''), 14, y);
+
+    y += 10; doc.setDrawColor(230,225,245); doc.line(14, y, 196, y);
+    y += 8;
+    doc.setFont('helvetica','bold'); doc.setTextColor(30,20,50);
+    doc.text('Item', 14, y); doc.text('Qty', 130, y, {align:'right'}); doc.text('Price', 160, y, {align:'right'}); doc.text('Total', 196, y, {align:'right'});
+    y += 3; doc.setDrawColor(230,225,245); doc.line(14, y, 196, y);
+    doc.setFont('helvetica','normal'); doc.setTextColor(60,50,70);
+
+    order.items.forEach(it=>{
+      y += 8;
+      if(y > 270){ doc.addPage(); y = 20; }
+      const name = it.name.length > 48 ? it.name.slice(0,45)+'...' : it.name;
+      doc.text(name, 14, y);
+      doc.text(String(it.qty), 130, y, {align:'right'});
+      doc.text(inr(it.price), 160, y, {align:'right'});
+      doc.text(inr(it.price*it.qty), 196, y, {align:'right'});
+    });
+
+    y += 6; doc.setDrawColor(230,225,245); doc.line(14, y, 196, y);
+    y += 8;
+    doc.text('Subtotal', 160, y, {align:'right'}); doc.text(inr(order.subtotal), 196, y, {align:'right'});
+    y += 6;
+    doc.text('Delivery Charge', 160, y, {align:'right'}); doc.text(order.deliveryCharge===0?'FREE':inr(order.deliveryCharge), 196, y, {align:'right'});
+    y += 6;
+    doc.text('Packaging Charge', 160, y, {align:'right'}); doc.text(inr(order.packagingCharge), 196, y, {align:'right'});
+    y += 8;
+    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(30,20,50);
+    doc.text('Total Amount', 160, y, {align:'right'}); doc.text(inr(order.total), 196, y, {align:'right'});
+
+    y += 20;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(140,130,155);
+    doc.text('Thank you for shopping with Meraki Stationery & Toys!', 14, y);
+
+    doc.save('Invoice-'+order.id+'.pdf');
+  } catch(e){
+    console.error('Invoice generation failed', e);
+  }
+}
+
 function OrdersPage(){
   const {orders} = useApp();
   if(orders.length===0){
@@ -1691,7 +1775,10 @@ function OrdersPage(){
             </div>
             <div className="flex justify-between items-center mt-3">
               <span className="text-sm font-bold">{inr(o.total)}</span>
-              <span className="text-xs font-bold text-[var(--purple)]">View Details ›</span>
+              <div className="flex items-center gap-3">
+                <button onClick={(e)=>{e.preventDefault(); e.stopPropagation(); downloadInvoice(o);}} className="text-xs font-bold text-[var(--muted)] hover:text-[var(--purple)] focus-ring flex items-center gap-1">⬇️ Invoice</button>
+                <span className="text-xs font-bold text-[var(--purple)]">View Details ›</span>
+              </div>
             </div>
           </a>
         ))}
@@ -1704,11 +1791,15 @@ function OrderDetailPage({route}){
   const orderId = route.parts[1];
   const {orders} = useApp();
   const order = orders.find(o=>o.id===orderId);
+  const [helpOpen, setHelpOpen] = useState(false);
   if(!order) return <div className="p-8 text-center text-[var(--muted)]">Order not found. <a className="text-[var(--purple)] font-semibold" href="#/orders">Back to orders</a></div>;
   const steps = order.statusSteps;
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-10 max-w-lg mx-auto">
-      <h1 className="font-display font-bold text-lg mb-1">Order #{order.id}</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="font-display font-bold text-lg">Order #{order.id}</h1>
+        <button onClick={()=>downloadInvoice(order)} className="text-xs font-bold text-[var(--purple)] flex items-center gap-1 focus-ring">⬇️ Invoice</button>
+      </div>
       <div className="text-xs text-[var(--muted)] mb-4">Placed on {new Date(order.date).toLocaleString()}</div>
 
       <div className="card p-4 mb-4">
@@ -1741,11 +1832,22 @@ function OrderDetailPage({route}){
         <div className="flex justify-between text-sm font-bold"><span>Total</span><span>{inr(order.total)}</span></div>
       </div>
 
-      <div className="card p-4">
+      <div className="card p-4 mb-4">
         <div className="font-bold text-sm mb-2">Delivery Address</div>
         <div className="text-sm">{order.address.name}</div>
         <div className="text-xs text-[var(--muted)]">{order.address.line1}, {order.address.area}, {order.address.city} - {order.address.pincode}</div>
       </div>
+
+      <button onClick={()=>setHelpOpen(true)} className="card p-4 w-full flex items-center gap-3 text-left focus-ring">
+        <span className="w-10 h-10 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0"><Icon.Chat /></span>
+        <div className="flex-1">
+          <div className="text-sm font-semibold">Need help with this order?</div>
+          <div className="text-xs text-[var(--muted)]">Chat with us, call, or browse FAQs</div>
+        </div>
+        <span className="text-[var(--muted)]">›</span>
+      </button>
+
+      {helpOpen && <HelpSupportModal onClose={()=>setHelpOpen(false)} />}
     </div>
   );
 }
@@ -1797,19 +1899,36 @@ function SearchPage(){
 function WishlistPage(){
   const {wishlist, productMap, moveWishlistToCart, toggleWishlist} = useApp();
   const items = wishlist.map(id=>productMap[id]).filter(Boolean);
+  const recommended = PRODUCTS.filter(p=> !wishlist.includes(p.id) && p.tags.includes('bestseller')).slice(0,8);
+
   if(items.length===0){
     return (
-      <div className="fade-in text-center py-20 px-4">
-        <div className="text-5xl mb-3">♡</div>
-        <div className="font-display font-bold text-lg">Your wishlist is empty</div>
-        <div className="text-sm text-[var(--muted)] mt-1">Tap the heart icon on any product to save it here.</div>
-        <a href="#/home" className="btn-primary inline-block px-6 py-2.5 text-sm mt-5 focus-ring">Explore Products</a>
+      <div className="fade-in">
+        <div className="text-center py-16 px-4">
+          <div className="text-5xl mb-3">♡</div>
+          <div className="font-display font-bold text-lg">Your wishlist is empty</div>
+          <div className="text-sm text-[var(--muted)] mt-1">Tap the heart icon on any product to save it here.</div>
+          <a href="#/home" className="btn-primary inline-block px-6 py-2.5 text-sm mt-5 focus-ring">Explore Products</a>
+        </div>
+        {recommended.length>0 && (
+          <div className="px-4 md:container-max md:mx-auto pb-8">
+            <div className="font-bold text-lg mb-3 font-display">You may also like</div>
+            <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+              {recommended.map(p=> (
+                <div key={p.id} className="snap-item flex-shrink-0 w-[150px]"><ProductCard product={p} /></div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-8">
-      <h1 className="font-display font-bold text-xl mb-4">My Wishlist ({items.length})</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="font-display font-bold text-xl">My Wishlist ({items.length})</h1>
+        <a href="#/home" className="text-sm font-bold text-[var(--purple)] focus-ring">Explore Products</a>
+      </div>
       <div className="flex flex-col gap-3">
         {items.map(p=> (
           <div key={p.id} className="card p-3 flex gap-3 items-center">
@@ -1828,6 +1947,16 @@ function WishlistPage(){
           </div>
         ))}
       </div>
+      {recommended.length>0 && (
+        <div className="mt-8">
+          <div className="font-bold text-lg mb-3 font-display">You may also like</div>
+          <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+            {recommended.map(p=> (
+              <div key={p.id} className="snap-item flex-shrink-0 w-[150px]"><ProductCard product={p} /></div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1848,7 +1977,7 @@ function AccordionItem({q, a}){
 }
 
 function StoreInfoModal({onClose}){
-  const storeAddress = "Shop No. LG-06, Below HDFC Bank, Mansarovar, Jaipur - 302021";
+  const storeAddress = "Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur - 302012";
   const hours = [
     ['Monday - Saturday','10:00 AM – 9:30 PM'],
     ['Sunday','10:00 AM – 2:00 PM'],
@@ -1884,7 +2013,7 @@ function HelpSupportModal({onClose}){
     {q:'How long does delivery take?', a:"Most orders in Jaipur are delivered within 2-4 hours. You can also choose Store Pickup at checkout if you'd like it sooner."},
     {q:'What is your return policy?', a:'Unused items in original packaging can be returned within 7 days of delivery. Refunds are processed to your original payment method within 3-5 business days.'},
     {q:'How do I track my order?', a:'Go to Account → My Orders and tap any order to see live status, from Order Confirmed all the way to Delivered.'},
-    {q:'Do you offer store pickup?', a:'Yes! Choose Store Pickup at checkout and your order will be ready at our Mansarovar store, usually within 2 hours.'},
+    {q:'Do you offer store pickup?', a:'Yes! Choose Store Pickup at checkout and your order will be ready at our Kalwar Road store, usually within 2 hours.'},
     {q:'Can I change my delivery address after ordering?', a:"Please call or WhatsApp us within 15 minutes of placing the order and we'll do our best to update it before it ships."},
   ];
   return (
@@ -1925,11 +2054,90 @@ function ToggleRow({label, sub, value, onChange}){
   );
 }
 
+function AddressBookModal({onClose}){
+  const {address, setAddress, showToast} = useApp();
+  const [addresses, setAddresses] = useLocalState('meraki_addresses', [
+    {id:'addr1', label:'Home', name:address.name, phone:address.phone, line1:address.line1, area:address.area, landmark:address.landmark, pincode:address.pincode, city:address.city}
+  ]);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({label:'', name:'', phone:'', line1:'', area:'', landmark:'', pincode:'', city:'Jaipur'});
+
+  const startNew = ()=>{ setForm({label:'', name:'', phone:'', line1:'', area:'', landmark:'', pincode:'', city:'Jaipur'}); setEditing('new'); };
+  const startEdit = (a)=>{ setForm(a); setEditing(a.id); };
+
+  const save = ()=>{
+    if(!form.name.trim() || !form.line1.trim() || !/^\d{6}$/.test(form.pincode||'')){
+      showToast('Please fill name, address & a valid PIN','⚠️');
+      return;
+    }
+    if(editing==='new'){
+      setAddresses(prev=> [...prev, {...form, id:'addr'+Date.now()}]);
+    } else {
+      setAddresses(prev=> prev.map(a=> a.id===editing ? {...form, id:editing} : a));
+    }
+    setEditing(null);
+  };
+
+  const remove = (id)=>{
+    setAddresses(prev=> prev.filter(a=>a.id!==id));
+  };
+
+  const setDefault = (a)=>{
+    setAddress(prev=>({...prev, name:a.name, phone:a.phone, line1:a.line1, area:a.area, landmark:a.landmark, pincode:a.pincode, city:a.city}));
+    showToast('Default delivery address updated','📍');
+  };
+
+  if(editing){
+    return (
+      <Modal onClose={()=>setEditing(null)} title={editing==='new' ? 'Add Address' : 'Edit Address'}>
+        <div className="space-y-3">
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Label (Home, Work, etc.)</label><input value={form.label} onChange={e=>setForm({...form,label:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Full Name</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Phone</label><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value.replace(/\D/g,'').slice(0,10)})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">House / Flat / Street</label><input value={form.line1} onChange={e=>setForm({...form,line1:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Area</label><input value={form.area} onChange={e=>setForm({...form,area:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">PIN Code</label><input value={form.pincode} onChange={e=>setForm({...form,pincode:e.target.value.replace(/\D/g,'').slice(0,6)})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <button onClick={save} className="btn-primary w-full py-2.5 focus-ring">Save Address</button>
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal onClose={onClose} title="Saved Addresses">
+      <div className="flex flex-col gap-2.5">
+        {addresses.map(a=>{
+          const isDefault = a.line1===address.line1 && a.pincode===address.pincode;
+          return (
+            <div key={a.id} className={"card p-3.5 "+(isDefault?'border-[var(--purple)] border-2':'')}>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">{a.label || 'Address'}</span>
+                {isDefault && <Badge tone="green">Default</Badge>}
+              </div>
+              <div className="text-xs text-[var(--muted)] mt-1">{a.name} · +91 {a.phone}</div>
+              <div className="text-xs text-[var(--muted)]">{a.line1}, {a.area}, {a.city} - {a.pincode}</div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={()=>setDefault(a)} disabled={isDefault} className="btn-secondary px-3 py-1.5 text-xs flex-1 focus-ring disabled:opacity-40">
+                  {isDefault ? 'Currently Default' : 'Use for Delivery'}
+                </button>
+                <button onClick={()=>startEdit(a)} aria-label="Edit address" className="w-8 h-8 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring"><Icon.Edit/></button>
+                <button onClick={()=>remove(a.id)} aria-label="Delete address" className="w-8 h-8 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring"><Icon.Close/></button>
+              </div>
+            </div>
+          );
+        })}
+        <button onClick={startNew} className="btn-primary w-full py-2.5 mt-1 focus-ring">+ Add New Address</button>
+      </div>
+    </Modal>
+  );
+}
+
 function SettingsModal({onClose}){
   const [notifPush, setNotifPush] = useLocalState('meraki_settings_push', true);
   const [notifWhatsapp, setNotifWhatsapp] = useLocalState('meraki_settings_whatsapp', true);
   const [notifEmail, setNotifEmail] = useLocalState('meraki_settings_email', false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [addressBookOpen, setAddressBookOpen] = useState(false);
   const {showToast, darkMode, setDarkMode} = useApp();
 
   const resetAllData = ()=>{
@@ -1940,6 +2148,7 @@ function SettingsModal({onClose}){
   };
 
   return (
+    <React.Fragment>
     <Modal onClose={onClose} title="Settings">
       <div className="space-y-4">
         <div>
@@ -1969,6 +2178,14 @@ function SettingsModal({onClose}){
           </div>
         </div>
         <div>
+          <div className="font-bold text-sm mb-2">Delivery</div>
+          <button onClick={()=>setAddressBookOpen(true)} className="card p-3.5 w-full flex items-center gap-3 text-left focus-ring">
+            <span className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0"><Icon.MapPin/></span>
+            <div className="flex-1"><div className="text-sm font-semibold">Manage Addresses</div><div className="text-xs text-[var(--muted)]">Add, edit or switch delivery addresses</div></div>
+            <span className="text-[var(--muted)]">›</span>
+          </button>
+        </div>
+        <div>
           <div className="font-bold text-sm mb-2">App</div>
           <div className="card p-3.5 flex justify-between text-sm"><span className="text-[var(--muted)]">Language</span><span className="font-semibold">English</span></div>
           <div className="card p-3.5 flex justify-between text-sm mt-2"><span className="text-[var(--muted)]">Currency</span><span className="font-semibold">INR (₹)</span></div>
@@ -1989,7 +2206,8 @@ function SettingsModal({onClose}){
         </div>
       </div>
     </Modal>
-
+  {addressBookOpen && <AddressBookModal onClose={()=>setAddressBookOpen(false)} />}
+  </React.Fragment>
   );
 }
 
