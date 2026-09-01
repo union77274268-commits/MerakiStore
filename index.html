@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="manifest" href="./manifest.json"> <meta name="theme-color" content="#6a2cbe"> <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Meraki — Stationery & Toys</title>
@@ -10,7 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Quicksand:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --purple:#6C3FC5;
@@ -24,16 +23,35 @@
     --line:#EDE7F7;
     --danger:#E0455D;
   }
+  html.dark{
+    --purple-light:#3A2E57;
+    --green-light:#173829;
+    --ink:#F1ECFB;
+    --muted:#A79BC4;
+    --line:#33294D;
+  }
+  html.dark body{background:#151022;}
+  html.dark .card,
+  html.dark .floating-nav,
+  html.dark .bg-white{background:#211a35 !important;}
+  html.dark input, html.dark select, html.dark textarea{background:#1b1530 !important; color:var(--ink) !important;}
+  html.dark ::placeholder{color:#6f6390;}
+  html.dark .placeholder-img{filter:brightness(.92) saturate(.92);}
+  html.dark .skeleton{background:linear-gradient(90deg,#2b2246 25%,#352a56 37%,#2b2246 63%);}
+  html.dark .chip{color:var(--ink);}
+  html *{transition:background-color .25s ease, border-color .25s ease, color .25s ease;}
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    font-family:'Inter',sans-serif;
+    font-family:'Quicksand',sans-serif;
     color:var(--ink);
     background:#FBFAFE;
     -webkit-font-smoothing:antialiased;
     overscroll-behavior-y:none;
   }
-  h1,h2,h3,h4,.font-display{font-family:'Poppins',sans-serif;}
+  h1,h2,h3,h4,.font-display{font-family:'Fredoka',sans-serif !important;letter-spacing:.01em;}
+  button,a,input,.card,.chip{transition:all .22s cubic-bezier(.25,.8,.25,1);}
+  a:active, button:active{transform:scale(.96);}
   .brand-m{color:#E0455D;}
   .brand-e{color:#F5A623;}
   .brand-r{color:#1E9E5A;}
@@ -52,22 +70,25 @@
   .card{
     background:#fff;
     border:1px solid var(--line);
-    border-radius:16px;
-    box-shadow:0 1px 2px rgba(36,26,56,0.03);
+    border-radius:22px;
+    box-shadow:0 2px 10px rgba(108,63,197,0.05);
+    transition:transform .28s cubic-bezier(.25,.8,.25,1), box-shadow .28s ease, border-color .2s ease;
   }
+  .card:hover{transform:translateY(-3px); box-shadow:0 10px 24px rgba(108,63,197,0.12);}
   .btn-primary{
-    background:var(--purple);color:#fff;border-radius:12px;font-weight:600;
-    transition:transform .15s ease, background .15s ease, box-shadow .15s ease;
-    box-shadow:0 4px 14px rgba(108,63,197,0.28);
+    background:var(--purple);color:#fff;border-radius:16px;font-weight:700;
+    transition:transform .18s cubic-bezier(.34,1.56,.64,1), background .18s ease, box-shadow .18s ease;
+    box-shadow:0 6px 16px rgba(108,63,197,0.32);
   }
-  .btn-primary:hover{background:var(--purple-dark);transform:translateY(-1px);}
-  .btn-primary:active{transform:translateY(0px) scale(.98);}
+  .btn-primary:hover{background:var(--purple-dark);transform:translateY(-2px) scale(1.015);}
+  .btn-primary:active{transform:translateY(0px) scale(.95);}
   .btn-primary:disabled{background:#C9BEE5;box-shadow:none;cursor:not-allowed;transform:none;}
   .btn-secondary{
-    background:#fff;color:var(--purple);border:1.5px solid var(--purple);border-radius:12px;font-weight:600;
-    transition:all .15s ease;
+    background:#fff;color:var(--purple);border:1.5px solid var(--purple);border-radius:16px;font-weight:700;
+    transition:all .18s cubic-bezier(.34,1.56,.64,1);
   }
-  .btn-secondary:hover{background:var(--purple-light);}
+  .btn-secondary:hover{background:var(--purple-light);transform:translateY(-2px) scale(1.015);}
+  .btn-secondary:active{transform:translateY(0) scale(.95);}
   .chip{
     border:1.5px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink);
     transition:all .15s ease; white-space:nowrap;
@@ -83,8 +104,10 @@
   @keyframes pop{0%{transform:scale(.5);opacity:0;}70%{transform:scale(1.08);}100%{transform:scale(1);opacity:1;}}
   .placeholder-img{
     display:flex;align-items:center;justify-content:center;
-    font-size:2.4rem; border-radius:14px; position:relative; overflow:hidden;
+    font-size:2.4rem; border-radius:20px; position:relative; overflow:hidden;
+    transition:transform .28s cubic-bezier(.25,.8,.25,1);
   }
+  .card:hover .placeholder-img{transform:scale(1.04) rotate(-1deg);}
   .placeholder-img::after{
     content:'';position:absolute;inset:0;
     background:radial-gradient(120% 120% at 20% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%);
@@ -97,12 +120,41 @@
   }
   .focus-ring:focus-visible{outline:3px solid var(--amber);outline-offset:2px;}
   a{text-decoration:none;color:inherit;}
+  input,select,textarea{border-radius:14px !important;}
+  input:focus,select:focus,textarea:focus{border-color:var(--purple) !important; box-shadow:0 0 0 3px rgba(108,63,197,0.12);}
   .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .container-max{max-width:1240px;margin:0 auto;}
   .sparkle{display:inline-block;animation:sparkleSpin 2.4s linear infinite;}
   @keyframes sparkleSpin{0%,100%{transform:rotate(0deg) scale(1);}50%{transform:rotate(20deg) scale(1.15);}}
   .skeleton{background:linear-gradient(90deg,#EDE7F7 25%,#F5F1FC 37%,#EDE7F7 63%);background-size:400% 100%;animation:sk 1.4s ease infinite;}
   @keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
+
+  /* Floating bottom nav */
+  .floating-nav{
+    background:#fff;
+    border-radius:999px;
+    box-shadow:0 12px 32px rgba(108,63,197,0.18), 0 2px 8px rgba(108,63,197,0.08);
+    border:1px solid var(--line);
+  }
+  .nav-item{
+    position:relative;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1), color .2s ease;
+  }
+  .nav-item .nav-icon{
+    display:flex;align-items:center;justify-content:center;
+    width:32px;height:32px;border-radius:50%;margin:0 auto;
+    transition:all .38s cubic-bezier(.34,1.56,.64,1);
+  }
+  .nav-item.active .nav-icon{
+    background:var(--purple-light);
+    transform:translateY(-12px) scale(1.45);
+    box-shadow:0 8px 16px rgba(108,63,197,0.28);
+  }
+  .nav-item:active{transform:scale(.88);}
+  .page-transition{animation:pageIn .38s cubic-bezier(.22,.8,.32,1);}
+  @keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.99);}to{opacity:1;transform:translateY(0) scale(1);}}
+  .wiggle{animation:wiggle .5s ease;}
+  @keyframes wiggle{0%,100%{transform:rotate(0);}25%{transform:rotate(-12deg) scale(1.15);}60%{transform:rotate(10deg) scale(1.15);}}
 </style>
 </head>
 <body>
@@ -123,16 +175,17 @@ const CATEGORIES = [
 
 const BRANDS = ['Classmate','Camlin','DOMS','Natraj','Apsara','Flair','Faber-Castell','Funskool','Joyo','Luvely'];
 
-function P(id,name,category,sub,brand,price,mrp,rating,reviews,stock,emoji,bg,desc,tags){
+function P(id,name,category,sub,brand,price,mrp,rating,reviews,stock,emoji,bg,desc,tags,variants){
   const discount = Math.round(((mrp-price)/mrp)*100);
-  return {id,name,category,sub,brand,price,mrp,discount,rating,reviews,stock,emoji,bg,desc,tags: tags||[]};
+  return {id,name,category,sub,brand,price,mrp,discount,rating,reviews,stock,emoji,bg,desc,tags: tags||[], variants: variants||null};
 }
 
 const PRODUCTS = [
   P('p1','Classmate Notebook (200 Pages)','stationery','Notebooks','Classmate',40,50,4.5,342,120,'📓','#DCEBFF','Single ruled long notebook with soft cover, ideal for daily school use.',['bestseller']),
   P('p2','Camlin Colour Pencils (12 Shades)','stationery','Colours','Camlin',85,110,4.6,201,80,'🖍️','#FFE3E9','Smooth, vivid colour pencils in a reusable tin box, 12 rich shades.',['bestseller']),
   P('p3','DOMS Brush Pens (14 Shades)','stationery','Colours','DOMS',120,150,4.7,128,64,'🖌️','#FFF1D6','Flexible-tip brush pens for colouring, sketching and lettering. Vibrant, non-toxic colours.',['bestseller']),
-  P('p4','Flair Ink Pen (Blue, 10 Pcs)','stationery','Pens','Flair',60,75,4.3,96,150,'🖊️','#E4F5FF','Smooth-flow ink pens with a comfortable grip, pack of 10.',[]),
+  P('p4','Flair Ink Pen (10 Pcs)','stationery','Pens','Flair',60,75,4.3,96,150,'🖊️','#E4F5FF','Smooth-flow ink pens with a comfortable grip, pack of 10.',[],
+    [{id:'blue',label:'Blue',color:'#2F6FED'},{id:'black',label:'Black',color:'#22252B'},{id:'red',label:'Red',color:'#E0455D'}]),
   P('p5','Natraj HB Pencils (Box of 10)','stationery','Pencils','Natraj',30,40,4.4,210,300,'✏️','#F1EBFB','Break-resistant HB graphite pencils, box of 10.',[]),
   P('p6','Apsara 10B Pencil','stationery','Pencils','Apsara',25,30,4.5,180,220,'✏️','#E7F8EE','Extra-dark 10B pencil, smudge-resistant, great for sketching.',[]),
   P('p7','Eraser — Apsara Non-Dust','stationery','Erasers & Sharpeners','Apsara',10,12,4.2,89,400,'🧼','#FFF4E0','Soft non-dust eraser that cleans without smudging.',[]),
@@ -157,6 +210,8 @@ const PRODUCTS = [
   P('p26','School Diary & Planner Set','school-supplies','Notebooks','Classmate',65,85,4.2,58,90,'📘','#FFF4E0','Weekly planner diary to track homework and school schedules.',[]),
   P('p27','Gift Hamper — Stationery Starter Kit','gifts','Hampers','Meraki',349,450,4.7,95,30,'🎁','#E6F3FF','A curated hamper of notebooks, pens & colours — ready to gift.',['bestseller']),
   P('p28','Personalised Name Pencil Set (Pack of 12)','gifts','Personalised','Meraki',199,260,4.5,73,45,'🎁','#E6F3FF','12 pencils engraved with a name of your choice — a sweet little gift.',[]),
+  P('p29','Pentonic Ball Pen (Pack of 5)','stationery','Pens','Flair',50,65,4.6,240,180,'🖊️','#E4F5FF','Smooth-writing ball pens with a comfort grip — pick your favourite barrel colour.',['bestseller'],
+    [{id:'blue',label:'Blue',color:'#2F6FED'},{id:'pink',label:'Pink',color:'#F472B6'},{id:'black',label:'Black',color:'#22252B'},{id:'red',label:'Red',color:'#E0455D'}]),
 ];
 
 const uid = () => Math.random().toString(36).slice(2,9);
@@ -221,12 +276,18 @@ function AppProvider({children}){
   const [wishlist, setWishlist] = useLocalState('meraki_wishlist', []); // [id]
   const [orders, setOrders] = useLocalState('meraki_orders', []);
   const [address, setAddress] = useLocalState('meraki_address', {
-    name:'Prashant Punia', phone:'8302416181', line1:'Shop No. LG-06, Below HDFC Bank',
+    name:'Prashant Punia', phone:'8302416181', email:'prashant@example.com', line1:'Shop No. LG-06, Below HDFC Bank',
     area:'Mansarovar', landmark:'Near HDFC Bank', pincode:'302021', city:'Jaipur', instructions:''
   });
   const [deliveryType, setDeliveryType] = useLocalState('meraki_delivery_type','home');
   const [paymentMethod, setPaymentMethod] = useLocalState('meraki_payment_method','cod');
+  const [loggedIn, setLoggedIn] = useLocalState('meraki_logged_in', true);
+  const [darkMode, setDarkMode] = useLocalState('meraki_dark_mode', false);
   const [toast, setToast] = useState(null);
+
+  useEffect(()=>{
+    document.documentElement.classList.toggle('dark', darkMode);
+  },[darkMode]);
 
   const showToast = useCallback((msg, icon)=>{
     setToast({msg, icon, key: uid()});
@@ -311,6 +372,7 @@ function AppProvider({children}){
     wishlist, toggleWishlist, moveWishlistToCart,
     orders, placeOrder,
     address, setAddress, deliveryType, setDeliveryType, paymentMethod, setPaymentMethod,
+    loggedIn, setLoggedIn, darkMode, setDarkMode,
     showToast, toast, productMap,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -318,9 +380,139 @@ function AppProvider({children}){
 
 /* ============================= SMALL UI PARTS ============================= */
 
+const Icon = {
+  Home: ({active}) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M4 11.5L12 4l8 7.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M6 10v8.2c0 .44.36.8.8.8H10v-5.2a2 2 0 0 1 4 0V19h3.2c.44 0 .8-.36.8-.8V10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill={active?"currentColor":"none"} fillOpacity={active?0.12:0}/>
+    </svg>
+  ),
+  Grid: ({active}) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <rect x="4" y="4" width="7" height="7" rx="2.2" stroke="currentColor" strokeWidth="2.1" fill={active?"currentColor":"none"} fillOpacity={active?0.15:0}/>
+      <rect x="13" y="4" width="7" height="7" rx="2.2" stroke="currentColor" strokeWidth="2.1" fill={active?"currentColor":"none"} fillOpacity={active?0.15:0}/>
+      <rect x="4" y="13" width="7" height="7" rx="2.2" stroke="currentColor" strokeWidth="2.1" fill={active?"currentColor":"none"} fillOpacity={active?0.15:0}/>
+      <rect x="13" y="13" width="7" height="7" rx="2.2" stroke="currentColor" strokeWidth="2.1" fill={active?"currentColor":"none"} fillOpacity={active?0.15:0}/>
+    </svg>
+  ),
+  Heart: ({active}) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M12 20s-7.2-4.5-9.6-9.1C.9 7.4 2.6 4 6.1 4c2 0 3.4 1 5.9 3.3C14.5 5 15.9 4 17.9 4c3.5 0 5.2 3.4 3.7 6.9C19.2 15.5 12 20 12 20Z"
+        stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round" fill={active?"currentColor":"none"} fillOpacity={active?1:0}/>
+    </svg>
+  ),
+  Box: ({active}) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M3.6 7.6 12 4l8.4 3.6v8.8L12 20l-8.4-3.6V7.6Z" stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round" fill={active?"currentColor":"none"} fillOpacity={active?0.14:0}/>
+      <path d="M3.6 7.6 12 11l8.4-3.4M12 11v9" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  User: ({active}) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8.3" r="3.4" stroke="currentColor" strokeWidth="2.1" fill={active?"currentColor":"none"} fillOpacity={active?0.16:0}/>
+      <path d="M4.8 19.6c1.2-3.4 4-5 7.2-5s6 1.6 7.2 5" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"/>
+    </svg>
+  ),
+  Search: ({size=22}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" strokeWidth="2.2"/>
+      <path d="M20 20l-4.3-4.3" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+    </svg>
+  ),
+  Cart: ({size=23}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M3.5 4.5h2l1.7 10.4a2 2 0 0 0 2 1.7h7.6a2 2 0 0 0 2-1.6l1.2-6.5H6.4" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="9.5" cy="20" r="1.5" fill="currentColor"/>
+      <circle cx="16.5" cy="20" r="1.5" fill="currentColor"/>
+    </svg>
+  ),
+  Menu: () => (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
+      <path d="M4 7h16M4 12h16M4 17h11" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"/>
+    </svg>
+  ),
+  Back: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M14.5 5 7.5 12l7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Close: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M5 5l14 14M19 5 5 19" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"/>
+    </svg>
+  ),
+  Package: () => (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+      <path d="M3.6 7.6 12 4l8.4 3.6v8.8L12 20l-8.4-3.6V7.6Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+      <path d="M3.6 7.6 12 11l8.4-3.4M12 11v9M7.8 5.8l8.4 3.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  MapPin: () => (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+      <path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+      <circle cx="12" cy="9.3" r="2.3" stroke="currentColor" strokeWidth="2"/>
+    </svg>
+  ),
+  Chat: () => (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+      <path d="M4 5.5h16v10.2H9.4L5 19.5v-3.8H4V5.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+      <path d="M8 9.5h8M8 12.4h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  ),
+  Store: () => (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+      <path d="M4 9.5 5 4h14l1 5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M4.5 9.5v9.8h15V9.5M4.5 9.5a2.6 2.6 0 0 0 5.1.6 2.6 2.6 0 0 0 5 0 2.6 2.6 0 0 0 5.1-.6" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+      <path d="M10 19.3v-4.6h4v4.6" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Settings: () => (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+      <path d="M19.4 13.6a1.8 1.8 0 0 0 .4 2l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.6v.2a1.9 1.9 0 0 1-3.8 0v-.1a1.8 1.8 0 0 0-1.2-1.7 1.8 1.8 0 0 0-2 .4l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.6-1.1h-.2a1.9 1.9 0 0 1 0-3.8h.1a1.8 1.8 0 0 0 1.7-1.2 1.8 1.8 0 0 0-.4-2l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.8 1.8 0 0 0 2 .4h.1a1.8 1.8 0 0 0 1.1-1.6v-.2a1.9 1.9 0 0 1 3.8 0v.1a1.8 1.8 0 0 0 1.1 1.6h.1a1.8 1.8 0 0 0 2-.4l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.8 1.8 0 0 0-.4 2v.1a1.8 1.8 0 0 0 1.6 1.1h.2a1.9 1.9 0 0 1 0 3.8h-.1a1.8 1.8 0 0 0-1.6 1.1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Logout: () => (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+      <path d="M9 20H5.8A1.8 1.8 0 0 1 4 18.2V5.8A1.8 1.8 0 0 1 5.8 4H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M15.5 16 20 12l-4.5-4M20 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Edit: () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <path d="M4 20h4l10.6-10.6a2.3 2.3 0 0 0-3.3-3.3L4.7 16.7 4 20Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Sun: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2"/>
+      <path d="M12 2.5v2.3M12 19.2v2.3M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.5 12h2.3M19.2 12h2.3M4.4 19.6 6 18M18 6l1.6-1.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  ),
+  Moon: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a6.7 6.7 0 0 0 10.2 10.2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" fill="currentColor" fillOpacity="0.1"/>
+    </svg>
+  ),
+  Bolt: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M12.8 2.5 4.4 13.6h5.4l-1.6 8 8.4-11.1H11.2l1.6-8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="currentColor" fillOpacity="0.18"/>
+    </svg>
+  ),
+  Share: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <circle cx="18" cy="5.5" r="2.3" stroke="currentColor" strokeWidth="1.9"/>
+      <circle cx="6" cy="12" r="2.3" stroke="currentColor" strokeWidth="1.9"/>
+      <circle cx="18" cy="18.5" r="2.3" stroke="currentColor" strokeWidth="1.9"/>
+      <path d="M8 10.7 16 6.3M8 13.3l8 4.4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
+    </svg>
+  ),
+};
+
+
 function Logo({size='text-2xl'}){
   return (
-    <a href="#/home" className={"font-display font-extrabold "+size+" leading-none flex items-center gap-1 select-none"}>
+    <a href="#/home" className={"font-display font-extrabold "+size+" leading-none flex items-center gap-1 select-none"} style={{fontFamily:"'Fredoka', sans-serif"}}>
       <span>
         <span className="brand-m">M</span><span className="brand-e">e</span><span className="brand-r">r</span><span className="brand-a">a</span><span className="brand-k">k</span><span className="brand-i">i</span>
       </span>
@@ -379,17 +571,35 @@ function ProductCard({product}){
   const {cart, addToCart, setCartQty, wishlist, toggleWishlist} = useApp();
   const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
+  const quickBuy = (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    addToCart(product.id,1);
+    navigate('#/checkout/address');
+  };
   return (
     <div className="card p-2.5 flex flex-col relative group">
       <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
-        className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring">
-        <span className={isWished ? 'text-[var(--danger)]' : 'text-gray-300'}>{isWished?'♥':'♡'}</span>
+        className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
+        <span key={isWished} className={"pop inline-block "+(isWished ? 'text-[var(--danger)]' : 'text-gray-300')}>{isWished?'♥':'♡'}</span>
       </button>
+      <div className="relative">
+        <a href={"#/product/"+product.id} className="block">
+          <ProductImg product={product} className="w-full aspect-square text-4xl mb-2" />
+          {product.tags.includes('bestseller') && <div className="absolute top-3 left-3"><Badge tone="amber">Bestseller</Badge></div>}
+        </a>
+        <button aria-label="Quick buy" onClick={quickBuy} title="Quick Buy"
+          className="absolute bottom-4 right-1.5 w-8 h-8 rounded-full bg-[var(--purple)] text-white shadow-lg flex items-center justify-center focus-ring hover:scale-110 transition-transform">
+          <Icon.Bolt />
+        </button>
+      </div>
       <a href={"#/product/"+product.id} className="block">
-        <ProductImg product={product} className="w-full aspect-square text-4xl mb-2" />
-        {product.tags.includes('bestseller') && <div className="absolute top-3 left-3"><Badge tone="amber">Bestseller</Badge></div>}
         <div className="text-[13px] font-semibold leading-snug line-clamp-2 min-h-[34px]">{product.name}</div>
       </a>
+      {product.variants && (
+        <div className="flex gap-1 mt-1">
+          {product.variants.slice(0,4).map(v=> <span key={v.id} className="w-3.5 h-3.5 rounded-full border border-black/10" style={{background:v.color}}></span>)}
+        </div>
+      )}
       <div className="flex items-baseline gap-1.5 mt-1">
         <span className="font-bold text-[15px]">{inr(product.price)}</span>
         <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>
@@ -428,10 +638,26 @@ function ProductGrid({products, cols}){
 
 function Toast(){
   const {toast} = useApp();
-  if(!toast) return null;
+  const [current, setCurrent] = useState(null);
+  const [visible, setVisible] = useState(false);
+  const hideTimer = useRef(null);
+
+  useEffect(()=>{
+    if(toast){
+      clearTimeout(hideTimer.current);
+      setCurrent(toast);
+      requestAnimationFrame(()=> requestAnimationFrame(()=> setVisible(true)));
+    } else if(current){
+      setVisible(false);
+      hideTimer.current = setTimeout(()=> setCurrent(null), 320);
+    }
+    return ()=> clearTimeout(hideTimer.current);
+  },[toast]);
+
+  if(!current) return null;
   return (
-    <div key={toast.key} className="pop fixed z-[80] left-1/2 -translate-x-1/2 bottom-24 md:bottom-8 bg-[var(--ink)] text-white px-4 py-2.5 rounded-full shadow-xl text-sm font-semibold flex items-center gap-2">
-      <span>{toast.icon}</span><span>{toast.msg}</span>
+    <div className={"fixed z-[80] left-1/2 -translate-x-1/2 bottom-24 md:bottom-8 bg-[var(--ink)] text-white px-4 py-2.5 rounded-full shadow-xl text-sm font-semibold flex items-center gap-2 transition-all duration-300 ease-[cubic-bezier(.34,1.56,.64,1)] "+(visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-3 scale-90')}>
+      <span>{current.icon}</span><span>{current.msg}</span>
     </div>
   );
 }
@@ -440,10 +666,20 @@ function Toast(){
 
 function CartButton(){
   const {cartCount} = useApp();
+  const [bounce, setBounce] = useState(false);
+  const prevCount = useRef(cartCount);
+  useEffect(()=>{
+    if(cartCount !== prevCount.current){
+      setBounce(true);
+      const t = setTimeout(()=> setBounce(false), 500);
+      prevCount.current = cartCount;
+      return ()=> clearTimeout(t);
+    }
+  },[cartCount]);
   return (
-    <a href="#/cart" aria-label="Cart" className="relative w-9 h-9 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring">
-      <span className="text-xl">🛒</span>
-      {cartCount>0 && <span className={"absolute -top-1 -right-1 bg-[var(--danger)] text-white text-[10px] font-bold rounded-full w-4.5 h-4.5 min-w-[18px] h-[18px] flex items-center justify-center "+(cartCount?'pulse':'')}>{cartCount}</span>}
+    <a href="#/cart" aria-label="Cart" className="relative w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring">
+      <span className={"inline-block "+(bounce?'wiggle':'')}><Icon.Cart /></span>
+      {cartCount>0 && <span className={"absolute -top-1 -right-1 bg-[var(--danger)] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center "+(bounce?'pulse':'')}>{cartCount}</span>}
     </a>
   );
 }
@@ -457,7 +693,7 @@ function SearchBar({autoFocus, onSubmitGo}){
   };
   return (
     <form onSubmit={submit} className="flex-1 flex items-center bg-[#F5F2FB] rounded-xl px-3 py-2 gap-2">
-      <span className="text-[var(--muted)]">🔍</span>
+      <span className="text-[var(--muted)]"><Icon.Search /></span>
       <input autoFocus={autoFocus} value={q} onChange={e=>setQ(e.target.value)}
         placeholder="Search for toys, stationery, art supplies..."
         className="bg-transparent outline-none text-sm w-full placeholder-[var(--muted)]" />
@@ -467,46 +703,65 @@ function SearchBar({autoFocus, onSubmitGo}){
 
 function MobileHeader({route}){
   const [menuOpen, setMenuOpen] = useState(false);
-  const {address} = useApp();
-  const showSearch = route.parts[0] !== 'home';
+  const [searchOpen, setSearchOpen] = useState(false);
   return (
     <div className="mobile-only sticky top-0 z-40 bg-white border-b border-[var(--line)]">
       <div className="flex items-center gap-3 px-4 py-3">
-        {route.parts.length>1 || ['cart','search','wishlist','account','orders','checkout'].includes(route.parts[0]) ? (
-          <button onClick={()=> window.history.length>1 ? window.history.back() : navigate('#/home')} aria-label="Back" className="text-xl focus-ring">←</button>
-        ) : (
-          <button aria-label="Menu" onClick={()=>setMenuOpen(true)} className="text-xl focus-ring">☰</button>
+        {!searchOpen && (
+          route.parts.length>1 || ['cart','search','wishlist','account','orders','checkout'].includes(route.parts[0]) ? (
+            <button onClick={()=> window.history.length>1 ? window.history.back() : navigate('#/home')} aria-label="Back" className="focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Back /></button>
+          ) : (
+            <button aria-label="Menu" onClick={()=>setMenuOpen(true)} className="focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Menu /></button>
+          )
         )}
-        <LogoBlock />
-        <div className="ml-auto flex items-center gap-1">
-          <a href="#/search" aria-label="Search" className="w-9 h-9 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring">🔍</a>
-          <CartButton />
+        <div className={"overflow-hidden transition-all duration-[350ms] ease-[cubic-bezier(.22,.9,.32,1)] "+(searchOpen?'flex-1':'w-0')} style={{maxWidth: searchOpen?'1000px':'0px'}}>
+          {searchOpen && <SearchBar autoFocus onSubmitGo={()=>setSearchOpen(false)} />}
+        </div>
+        {!searchOpen && <LogoBlock />}
+        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+          {!searchOpen ? (
+            <button aria-label="Search" onClick={()=>setSearchOpen(true)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Search /></button>
+          ) : (
+            <button aria-label="Close search" onClick={()=>setSearchOpen(false)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Close /></button>
+          )}
+          {!searchOpen && <CartButton />}
         </div>
       </div>
-      {route.parts[0]==='home' && (
-        <div className="px-4 pb-3">
-          <SearchBar />
-        </div>
-      )}
       <DeliveryStrip />
-      {menuOpen && <MobileMenu onClose={()=>setMenuOpen(false)} />}
+      <MobileMenu open={menuOpen} onClose={()=>setMenuOpen(false)} />
     </div>
   );
 }
 
+const PIN_TO_AREA = {
+  '302021':'Mansarovar', '302001':'Chandpole Bazaar', '302015':'Malviya Nagar',
+  '302017':'C-Scheme', '302012':'Vaishali Nagar', '302020':'Sanganer',
+  '302029':'Jagatpura', '302004':'Raja Park', '302018':'Jawahar Nagar', '302033':'Pratap Nagar',
+};
+
 function DeliveryStrip(){
   const {address} = useApp();
   const [changing, setChanging] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const requestDismiss = ()=>{
+    setClosing(true);
+    setTimeout(()=> setDismissed(true), 320);
+  };
+  if(dismissed) return null;
   return (
-    <div className="flex items-center justify-between bg-[#FFF8E9] text-xs px-4 py-2 border-t border-[var(--line)]">
-      <div className="flex items-center gap-1 truncate">
-        <span>📍</span>
-        <span className="truncate">Delivering to <b>{address.pincode}</b> ({address.area})</span>
-        <button onClick={()=>setChanging(true)} className="text-[var(--purple)] font-bold ml-1 underline-offset-2 hover:underline focus-ring">Change</button>
-      </div>
-      <div className="hidden sm:flex items-center gap-3 text-[var(--muted)] flex-shrink-0 ml-2">
-        <span>🕐 Delivery in 2-4 hrs</span>
-        <span>🏬 Store Pickup Available</span>
+    <div className={"overflow-hidden transition-all duration-300 ease-in-out "+(closing ? 'max-h-0 opacity-0' : 'max-h-16 opacity-100')}>
+      <div className="flex items-center justify-between bg-[#FFF8E9] text-xs px-4 py-2 border-t border-[var(--line)]">
+        <div className="flex items-center gap-1 truncate">
+          <span>📍</span>
+          <span className="truncate">Delivering to <b>{address.pincode}</b> ({address.area})</span>
+          <button onClick={()=>setChanging(true)} className="text-[var(--purple)] font-bold ml-1 underline-offset-2 hover:underline focus-ring">Change</button>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+          <span className="hidden sm:inline text-[var(--muted)]">🕐 Delivery in 2-4 hrs</span>
+          <span className="hidden sm:inline text-[var(--muted)]">🏬 Store Pickup Available</span>
+          <button onClick={requestDismiss} aria-label="Dismiss delivery info" className="text-[var(--muted)] hover:text-[var(--ink)] focus-ring w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/5"><Icon.Close /></button>
+        </div>
       </div>
       {changing && <ChangeLocationModal onClose={()=>setChanging(false)} />}
     </div>
@@ -517,16 +772,38 @@ function ChangeLocationModal({onClose}){
   const {address, setAddress} = useApp();
   const [pin, setPin] = useState(address.pincode);
   const [area, setArea] = useState(address.area);
+  const [autoDetected, setAutoDetected] = useState(false);
+
+  useEffect(()=>{
+    if(/^\d{6}$/.test(pin) && PIN_TO_AREA[pin]){
+      setArea(PIN_TO_AREA[pin]);
+      setAutoDetected(true);
+    } else {
+      setAutoDetected(false);
+    }
+  },[pin]);
+
   return (
     <Modal onClose={onClose} title="Change delivery location">
       <div className="space-y-3">
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">PIN Code</label>
-          <input value={pin} onChange={e=>setPin(e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          <div className="relative mt-1">
+            <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,'').slice(0,6))}
+              className="w-full border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm focus-ring" />
+            {pin && (
+              <button aria-label="Clear PIN code" onClick={()=>{setPin(''); setAutoDetected(false);}}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--ink)] w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/5 focus-ring">
+                <Icon.Close />
+              </button>
+            )}
+          </div>
         </div>
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)]">Area</label>
-          <input value={area} onChange={e=>setArea(e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          <label className="text-xs font-semibold text-[var(--muted)] flex items-center gap-1.5">
+            Area {autoDetected && <span className="text-[var(--green)] font-bold">· Auto-detected ✨</span>}
+          </label>
+          <input value={area} onChange={e=>{setArea(e.target.value); setAutoDetected(false);}} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
         </div>
         <button onClick={()=>{ setAddress({...address, pincode:pin, area:area}); onClose(); }}
           className="btn-primary w-full py-2.5 focus-ring">Save Location</button>
@@ -535,7 +812,23 @@ function ChangeLocationModal({onClose}){
   );
 }
 
-function MobileMenu({onClose}){
+function MobileFooterCompact(){
+  return (
+    <div className="mt-5 pt-5 border-t border-[var(--line)]">
+      <div className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wide mb-2">Our Store</div>
+      <div className="text-xs text-[var(--muted)] leading-relaxed">Shop No. LG-06, Below HDFC Bank, Mansarovar, Jaipur — 302021</div>
+      <div className="text-xs text-[var(--muted)] mt-1">📞 8302416181 · 10:00 AM – 9:30 PM</div>
+      <div className="flex gap-3 mt-3 text-lg">
+        <a href="https://wa.me/918302416181" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className="focus-ring">💬</a>
+        <a href="tel:8302416181" aria-label="Call" className="focus-ring">📞</a>
+        <a href="mailto:hello@merakistore.in" aria-label="Email" className="focus-ring">✉️</a>
+      </div>
+      <div className="text-center text-[10px] text-[var(--muted)]/70 mt-4">© 2026 Meraki Stationery &amp; Toys</div>
+    </div>
+  );
+}
+
+function MobileMenu({open, onClose}){
   const items = [
     {label:'Home', href:'#/home', icon:'🏠'},
     ...CATEGORIES.map(c=>({label:c.name, href:'#/category/'+c.id, icon:c.icon})),
@@ -544,12 +837,12 @@ function MobileMenu({onClose}){
     {label:'Account', href:'#/account', icon:'👤'},
   ];
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/40 fade-in" onClick={onClose}></div>
-      <div className="relative bg-white w-72 max-w-[80%] h-full p-5 rise-in shadow-2xl" style={{animationName:'none', transform:'none'}}>
+    <div className={"fixed inset-0 z-50 flex "+(open?'':'pointer-events-none')}>
+      <div className={"absolute inset-0 bg-black/40 transition-opacity duration-300 "+(open?'opacity-100':'opacity-0')} onClick={onClose}></div>
+      <div className={"relative bg-white w-72 max-w-[80%] h-full p-5 shadow-2xl overflow-y-auto transition-transform duration-[350ms] ease-[cubic-bezier(.22,.9,.32,1)] "+(open?'translate-x-0':'-translate-x-full')}>
         <div className="flex items-center justify-between mb-6">
           <LogoBlock />
-          <button onClick={onClose} aria-label="Close menu" className="text-xl focus-ring">✕</button>
+          <button onClick={onClose} aria-label="Close menu" className="focus-ring w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/5"><Icon.Close /></button>
         </div>
         <div className="flex flex-col gap-1">
           {items.map(it=> (
@@ -558,6 +851,7 @@ function MobileMenu({onClose}){
             </a>
           ))}
         </div>
+        <div className="mobile-only"><MobileFooterCompact /></div>
       </div>
     </div>
   );
@@ -574,9 +868,9 @@ function DesktopHeader({route}){
         </nav>
         <div className="flex-1 max-w-md ml-4"><SearchBar /></div>
         <div className="flex items-center gap-3 ml-auto">
-          <a href="#/wishlist" aria-label="Wishlist" className="w-9 h-9 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring">♡</a>
+          <a href="#/wishlist" aria-label="Wishlist" className="w-9 h-9 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Heart /></a>
           <a href="#/account" className="flex items-center gap-1.5 text-sm font-semibold hover:text-[var(--purple)] focus-ring">
-            <span className="w-8 h-8 rounded-full bg-[var(--purple-light)] flex items-center justify-center">👤</span>
+            <span className="w-8 h-8 rounded-full bg-[var(--purple-light)] flex items-center justify-center"><Icon.User /></span>
             Account
           </a>
           <CartButton />
@@ -590,20 +884,21 @@ function DesktopHeader({route}){
 function BottomNav({route}){
   const active = route.parts[0] || 'home';
   const items = [
-    {key:'home', label:'Home', icon:'🏠', href:'#/home'},
-    {key:'category', label:'Categories', icon:'▦', href:'#/category/stationery'},
-    {key:'search', label:'Search', icon:'🔍', href:'#/search'},
-    {key:'orders', label:'Orders', icon:'📦', href:'#/orders'},
-    {key:'account', label:'Account', icon:'👤', href:'#/account'},
+    {key:'home', label:'Home', Icon:Icon.Home, href:'#/home'},
+    {key:'category', label:'Categories', Icon:Icon.Grid, href:'#/category/stationery'},
+    {key:'wishlist', label:'Wishlist', Icon:Icon.Heart, href:'#/wishlist'},
+    {key:'orders', label:'Orders', Icon:Icon.Box, href:'#/orders'},
+    {key:'account', label:'Account', Icon:Icon.User, href:'#/account'},
   ];
   return (
-    <div className="mobile-only fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[var(--line)] safe-bottom">
-      <div className="flex justify-between px-2">
+    <div className="mobile-only fixed bottom-0 left-0 right-0 z-40 px-3 pb-2.5 safe-bottom pointer-events-none">
+      <div className="floating-nav pointer-events-auto flex justify-between items-center px-3 py-1.5 max-w-[300px] mx-auto">
         {items.map(it=>{
-          const isActive = active===it.key || (it.key==='category' && active==='category');
+          const isActive = active===it.key;
+          const ItemIcon = it.Icon;
           return (
-            <a key={it.key} href={it.href} className={"flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold focus-ring "+(isActive?'text-[var(--purple)]':'text-[var(--muted)]')}>
-              <span className="text-lg leading-none">{it.icon}</span>{it.label}
+            <a key={it.key} href={it.href} aria-label={it.label} className={"nav-item flex items-center justify-center py-1 px-0.5 focus-ring "+(isActive?'active text-[var(--purple)]':'text-[var(--muted)]')}>
+              <span className="nav-icon"><ItemIcon active={isActive} /></span>
             </a>
           );
         })}
@@ -613,18 +908,35 @@ function BottomNav({route}){
 }
 
 function Modal({onClose, title, children}){
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+
   useEffect(()=>{
-    const onEsc = (e)=>{ if(e.key==='Escape') onClose(); };
+    const raf = requestAnimationFrame(()=> requestAnimationFrame(()=> setMounted(true)));
+    return ()=> cancelAnimationFrame(raf);
+  },[]);
+
+  const requestClose = useCallback(()=>{
+    setClosing(true);
+    setTimeout(()=> onClose(), 260);
+  },[onClose]);
+
+  useEffect(()=>{
+    const onEsc = (e)=>{ if(e.key==='Escape') requestClose(); };
     document.addEventListener('keydown', onEsc);
     return ()=> document.removeEventListener('keydown', onEsc);
-  },[onClose]);
+  },[requestClose]);
+
+  const visible = mounted && !closing;
+
   return (
     <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 fade-in" onClick={onClose}></div>
-      <div className="relative bg-white w-full md:w-[420px] md:rounded-2xl rounded-t-2xl p-5 rise-in max-h-[85vh] overflow-y-auto">
+      <div className={"absolute inset-0 bg-black/40 transition-opacity duration-300 "+(visible?'opacity-100':'opacity-0')} onClick={requestClose}></div>
+      <div className={"relative bg-white w-full md:w-[420px] md:rounded-2xl rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto transition-all duration-300 ease-[cubic-bezier(.22,.9,.32,1)] "+
+        (visible ? 'translate-y-0 md:scale-100 opacity-100' : 'translate-y-full md:translate-y-3 md:scale-95 opacity-0')}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-display font-bold text-lg">{title}</h3>
-          <button onClick={onClose} aria-label="Close" className="text-xl focus-ring">✕</button>
+          <button onClick={requestClose} aria-label="Close" className="focus-ring w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/5"><Icon.Close /></button>
         </div>
         {children}
       </div>
@@ -689,7 +1001,7 @@ function HomePage(){
 
 function Footer(){
   return (
-    <div className="mt-10 bg-[var(--ink)] text-white/80 px-6 py-8 text-sm">
+    <div className="desktop-only mt-10 bg-[var(--ink)] text-white/80 px-6 py-8 text-sm">
       <div className="container-max grid md:grid-cols-4 gap-6">
         <div>
           <div className="font-display font-extrabold text-white text-lg">Meraki</div>
@@ -755,44 +1067,48 @@ function CategoryPage({route}){
   const sortLabels = {popular:'Popular', price_low:'Price: Low to High', price_high:'Price: High to Low', newest:'Newest', discount:'Discount'};
 
   return (
-    <div className="fade-in">
-      <div className="px-4 md:container-max md:mx-auto pt-4 pb-2 desktop-only">
-        <h1 className="font-display font-bold text-2xl">{cat.icon} {cat.name}</h1>
-        <div className="text-sm text-[var(--muted)]">{list.length} products</div>
+    <div className="fade-in flex">
+      {/* Zepto-style left category rail */}
+      <div className="w-[76px] sm:w-[92px] flex-shrink-0 border-r border-[var(--line)] bg-white">
+        {CATEGORIES.map(c=>{
+          const active = c.id===catId;
+          return (
+            <a key={c.id} href={"#/category/"+c.id}
+              className={"flex flex-col items-center gap-1 py-4 px-1 text-center border-l-[3px] transition-colors focus-ring "+
+                (active ? 'border-[var(--purple)] bg-[var(--purple-light)]' : 'border-transparent hover:bg-gray-50')}>
+              <div className={"text-xl transition-transform "+(active?'scale-110':'')}>{c.icon}</div>
+              <div className={"text-[10px] font-bold leading-tight "+(active?'text-[var(--purple)]':'text-[var(--muted)]')}>{c.name}</div>
+            </a>
+          );
+        })}
       </div>
-      <div className="px-4 md:container-max md:mx-auto mt-2 md:mt-4 flex gap-4">
-        {/* Desktop sidebar filters */}
-        <div className="desktop-only w-64 flex-shrink-0">
-          <FilterPanel {...{subcats, subFilter, setSubFilter, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}} />
+
+      <div className="flex-1 min-w-0 px-3 md:px-6 py-3">
+        <div className="hidden md:block mb-2">
+          <h1 className="font-display font-bold text-2xl">{cat.icon} {cat.name}</h1>
+          <div className="text-sm text-[var(--muted)]">{list.length} products</div>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="mobile-only px-0 pb-2">
-            <div className="flex items-center justify-between mb-2">
-              <button onClick={()=>setFiltersOpen(true)} className="chip flex items-center gap-1 focus-ring">🧰 Filters</button>
-              <button onClick={()=>setSortOpen(true)} className="chip flex items-center gap-1 focus-ring">Sort: {sortLabels[sort]} ▾</button>
-              <div className="flex gap-1">
-                <button onClick={()=>setView('grid')} className={"chip px-2 "+(view==='grid'?'active':'')}>▦</button>
-                <button onClick={()=>setView('list')} className={"chip px-2 "+(view==='list'?'active':'')}>≡</button>
-              </div>
+
+        <div className="pb-2">
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <button onClick={()=>setFiltersOpen(true)} className="chip flex items-center gap-1 focus-ring">🧰 Filters</button>
+            <button onClick={()=>setSortOpen(true)} className="chip flex items-center gap-1 focus-ring">Sort: {sortLabels[sort]} ▾</button>
+            <div className="flex gap-1 ml-auto">
+              <button onClick={()=>setView('grid')} className={"chip px-2 "+(view==='grid'?'active':'')}>▦</button>
+              <button onClick={()=>setView('list')} className={"chip px-2 "+(view==='list'?'active':'')}>≡</button>
             </div>
-            <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(subFilter!=='all'||brandFilter.length||inStockOnly) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
+          </div>
+          <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(subFilter!=='all'||brandFilter.length||inStockOnly) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
+          {subcats.length>0 && (
             <div className="flex gap-2 overflow-x-auto scrollbar-none">
               <button onClick={()=>setSubFilter('all')} className={"chip "+(subFilter==='all'?'active':'')}>All</button>
               {subcats.map(s=> <button key={s} onClick={()=>setSubFilter(s)} className={"chip "+(subFilter===s?'active':'')}>{s}</button>)}
             </div>
-          </div>
-          <div className="hidden md:flex items-center justify-between mb-3">
-            <div className="flex gap-2 overflow-x-auto scrollbar-none">
-              <button onClick={()=>setSubFilter('all')} className={"chip "+(subFilter==='all'?'active':'')}>All</button>
-              {subcats.map(s=> <button key={s} onClick={()=>setSubFilter(s)} className={"chip "+(subFilter===s?'active':'')}>{s}</button>)}
-            </div>
-            <select value={sort} onChange={e=>setSort(e.target.value)} className="border border-[var(--line)] rounded-lg px-3 py-2 text-sm font-semibold focus-ring">
-              {Object.entries(sortLabels).map(([k,v])=> <option key={k} value={k}>Sort by: {v}</option>)}
-            </select>
-          </div>
-          <ProductGrid products={list} cols={view==='grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1'} />
+          )}
         </div>
+        <ProductGrid products={list} cols={view==='grid' ? 'grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'} />
       </div>
+
       {filtersOpen && (
         <Modal onClose={()=>setFiltersOpen(false)} title="Filters">
           <FilterPanel {...{subcats, subFilter, setSubFilter, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}} />
@@ -846,24 +1162,42 @@ function FilterPanel({subcats, subFilter, setSubFilter, priceMax, setPriceMax, b
 
 function ProductPage({route}){
   const id = route.parts[1];
-  const {productMap, cart, addToCart, setCartQty, wishlist, toggleWishlist, address} = useApp();
+  const {productMap, cart, addToCart, wishlist, toggleWishlist, address, showToast} = useApp();
   const product = productMap[id];
   const [qty, setQty] = useState(1);
   const [shareOpen, setShareOpen] = useState(false);
+  const [variantIdx, setVariantIdx] = useState(0);
 
-  useEffect(()=>{ setQty(1); }, [id]);
+  useEffect(()=>{ setQty(1); setVariantIdx(0); }, [id]);
 
   if(!product) return <div className="p-8 text-center text-[var(--muted)]">Product not found. <a className="text-[var(--purple)] font-semibold" href="#/home">Go home</a></div>;
 
   const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
-  const related = PRODUCTS.filter(p=> p.category===product.category && p.id!==product.id).slice(0,3);
+  const related = PRODUCTS.filter(p=> p.category===product.category && p.id!==product.id).slice(0,8);
+  const selectedVariant = product.variants ? product.variants[variantIdx] : null;
+
+  const onAddToCartClick = ()=>{
+    if(line){ navigate('#/cart'); return; }
+    addToCart(product.id, qty);
+    if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒');
+  };
 
   return (
-    <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-28 md:pb-10">
+    <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-10">
       <div className="md:grid md:grid-cols-2 md:gap-10">
-        <div>
+        <div className="relative">
           <ProductImg product={product} className="w-full aspect-square text-7xl md:rounded-2xl" />
+          <div className="absolute top-3 right-3 flex flex-col gap-2">
+            <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
+              className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
+              <span key={isWished} className={"pop inline-block "+(isWished?'text-[var(--danger)]':'text-gray-400')}>{isWished?'♥':'♡'}</span>
+            </button>
+            <button aria-label="Share" onClick={()=>setShareOpen(true)}
+              className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform text-[var(--ink)]">
+              <Icon.Share />
+            </button>
+          </div>
         </div>
         <div className="mt-4 md:mt-0">
           <h1 className="font-display font-bold text-xl md:text-2xl">{product.name}</h1>
@@ -882,20 +1216,31 @@ function ProductPage({route}){
             <span className="text-xs text-[var(--muted)]">Ships in 2-4 hrs</span>
           </div>
 
+          {product.variants && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold mb-1.5">Colour: <span className="text-[var(--muted)] font-normal">{selectedVariant.label}</span></div>
+              <div className="flex gap-2.5">
+                {product.variants.map((v,i)=> (
+                  <button key={v.id} aria-label={v.label} onClick={()=>setVariantIdx(i)}
+                    className={"w-8 h-8 rounded-full border-2 transition-all focus-ring flex items-center justify-center "+(i===variantIdx?'border-[var(--purple)] scale-110':'border-transparent hover:scale-105')}
+                    style={{boxShadow: i===variantIdx ? '0 0 0 2px #fff, 0 0 0 3.5px var(--purple)' : '0 0 0 1px rgba(0,0,0,0.08)'}}>
+                    <span className="w-6 h-6 rounded-full" style={{background:v.color}}></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-4 mt-4">
             <span className="text-sm font-semibold">Quantity</span>
             <QuantitySelector qty={qty} onChange={(q)=>setQty(clamp(q,1,20))} />
           </div>
 
           <div className="flex gap-3 mt-5">
-            <button onClick={()=>addToCart(product.id, qty)} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
-            <button onClick={()=>{ addToCart(product.id, qty); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
-          </div>
-          <div className="flex gap-3 mt-2">
-            <button onClick={()=>toggleWishlist(product.id)} className="flex-1 text-sm font-semibold flex items-center justify-center gap-1.5 py-2 focus-ring">
-              <span className={isWished?'text-[var(--danger)]':''}>{isWished?'♥':'♡'}</span> Wishlist
+            <button onClick={onAddToCartClick} className="btn-primary flex-1 py-3 text-sm focus-ring">
+              {line ? `Go to Cart (${line.qty})` : '🛒 Add to Cart'}
             </button>
-            <button onClick={()=>setShareOpen(true)} className="flex-1 text-sm font-semibold flex items-center justify-center gap-1.5 py-2 focus-ring">↗ Share</button>
+            <button onClick={()=>{ addToCart(product.id, qty); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
           </div>
 
           <div className="card p-3 mt-4 flex items-center justify-between text-sm">
@@ -917,18 +1262,15 @@ function ProductPage({route}){
       {related.length>0 && (
         <div className="mt-8">
           <div className="font-bold text-lg mb-3 font-display">You may also like</div>
-          <ProductGrid products={related} cols="grid-cols-3" />
+          <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+            {related.map(p=> (
+              <div key={p.id} className="snap-item flex-shrink-0 w-[150px]">
+                <ProductCard product={p} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
-
-      {/* sticky mobile add-to-cart bar */}
-      <div className="mobile-only fixed bottom-16 left-0 right-0 z-30 bg-white border-t border-[var(--line)] p-3 flex gap-3 safe-bottom">
-        {!line ? (
-          <button onClick={()=>addToCart(product.id, qty)} className="btn-primary flex-1 py-3 text-sm focus-ring">Add to Cart · {inr(product.price*qty)}</button>
-        ) : (
-          <a href="#/cart" className="btn-primary flex-1 py-3 text-sm focus-ring text-center">Go to Cart ({line.qty})</a>
-        )}
-      </div>
 
       {shareOpen && (
         <Modal onClose={()=>setShareOpen(false)} title="Share this product">
@@ -1492,55 +1834,304 @@ function WishlistPage(){
 
 /* ============================= ACCOUNT ============================= */
 
+function AccordionItem({q, a}){
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-[var(--line)] rounded-2xl overflow-hidden">
+      <button onClick={()=>setOpen(v=>!v)} className="w-full flex items-center justify-between gap-2 px-3.5 py-3 text-left text-sm font-semibold focus-ring">
+        <span>{q}</span>
+        <span className={"text-[var(--purple)] transition-transform duration-300 "+(open?'rotate-45':'')}>+</span>
+      </button>
+      {open && <div className="px-3.5 pb-3 text-xs text-[var(--muted)] leading-relaxed fade-in">{a}</div>}
+    </div>
+  );
+}
+
+function StoreInfoModal({onClose}){
+  const storeAddress = "Shop No. LG-06, Below HDFC Bank, Mansarovar, Jaipur - 302021";
+  const hours = [
+    ['Monday - Saturday','10:00 AM – 9:30 PM'],
+    ['Sunday','10:00 AM – 2:00 PM'],
+  ];
+  return (
+    <Modal onClose={onClose} title="Store Information">
+      <div className="space-y-4 text-sm">
+        <div className="card p-3.5">
+          <div className="font-bold flex items-center gap-1.5">🏬 Meraki Stationery &amp; Toys</div>
+          <div className="text-xs text-[var(--muted)] mt-1">{storeAddress}</div>
+        </div>
+        <div>
+          <div className="font-bold text-sm mb-2">🕐 Store Timings</div>
+          <div className="flex flex-col gap-1.5">
+            {hours.map(([d,t])=> (
+              <div key={d} className="flex justify-between text-xs card px-3.5 py-2.5">
+                <span className="font-semibold">{d}</span><span className="text-[var(--muted)]">{t}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(storeAddress)} target="_blank" rel="noopener noreferrer" className="btn-secondary py-2.5 text-sm text-center focus-ring">📍 Get Directions</a>
+          <a href="tel:8302416181" className="btn-primary py-2.5 text-sm text-center focus-ring">📞 Call Store</a>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function HelpSupportModal({onClose}){
+  const faqs = [
+    {q:'How long does delivery take?', a:"Most orders in Jaipur are delivered within 2-4 hours. You can also choose Store Pickup at checkout if you'd like it sooner."},
+    {q:'What is your return policy?', a:'Unused items in original packaging can be returned within 7 days of delivery. Refunds are processed to your original payment method within 3-5 business days.'},
+    {q:'How do I track my order?', a:'Go to Account → My Orders and tap any order to see live status, from Order Confirmed all the way to Delivered.'},
+    {q:'Do you offer store pickup?', a:'Yes! Choose Store Pickup at checkout and your order will be ready at our Mansarovar store, usually within 2 hours.'},
+    {q:'Can I change my delivery address after ordering?', a:"Please call or WhatsApp us within 15 minutes of placing the order and we'll do our best to update it before it ships."},
+  ];
+  return (
+    <Modal onClose={onClose} title="Help & Support">
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-2">
+          <a href="tel:8302416181" className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">📞</span><span className="text-[11px] font-bold">Call Us</span></a>
+          <a href="https://wa.me/918302416181" target="_blank" rel="noopener noreferrer" className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">💬</span><span className="text-[11px] font-bold">WhatsApp</span></a>
+          <a href="mailto:hello@merakistore.in" className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">✉️</span><span className="text-[11px] font-bold">Email</span></a>
+        </div>
+        <div>
+          <div className="font-bold text-sm mb-2">Frequently Asked Questions</div>
+          <div className="flex flex-col gap-2">
+            {faqs.map(f=> <AccordionItem key={f.q} q={f.q} a={f.a} />)}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ToggleRow({label, sub, value, onChange}){
+  return (
+    <div className="card p-3.5 flex items-center gap-3">
+      <div className="flex-1">
+        <div className="text-sm font-semibold">{label}</div>
+        {sub && <div className="text-xs text-[var(--muted)]">{sub}</div>}
+      </div>
+      <button
+        onClick={()=>onChange(!value)}
+        aria-pressed={value}
+        aria-label={label}
+        className={"w-11 h-6 rounded-full relative focus-ring flex-shrink-0 "+(value?'bg-[var(--purple)]':'bg-gray-200')}
+      >
+        <span className={"absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 "+(value?'left-[22px]':'left-0.5')}></span>
+      </button>
+    </div>
+  );
+}
+
+function SettingsModal({onClose}){
+  const [notifPush, setNotifPush] = useLocalState('meraki_settings_push', true);
+  const [notifWhatsapp, setNotifWhatsapp] = useLocalState('meraki_settings_whatsapp', true);
+  const [notifEmail, setNotifEmail] = useLocalState('meraki_settings_email', false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const {showToast, darkMode, setDarkMode} = useApp();
+
+  const resetAllData = ()=>{
+    ['meraki_cart','meraki_wishlist','meraki_orders','meraki_address','meraki_delivery_type','meraki_payment_method'].forEach(k=> localStorage.removeItem(k));
+    showToast('All app data cleared','🧹');
+    setConfirmReset(false);
+    setTimeout(()=>{ onClose(); window.location.hash = '#/home'; window.location.reload(); }, 400);
+  };
+
+  return (
+    <Modal onClose={onClose} title="Settings">
+      <div className="space-y-4">
+        <div>
+          <div className="font-bold text-sm mb-2">Appearance</div>
+          <div className="card p-3.5 flex items-center gap-3">
+            <span className="text-[var(--purple)]">{darkMode ? <Icon.Moon/> : <Icon.Sun/>}</span>
+            <div className="flex-1">
+              <div className="text-sm font-semibold">Dark Mode</div>
+              <div className="text-xs text-[var(--muted)]">Easier on the eyes at night</div>
+            </div>
+            <button
+              onClick={()=>setDarkMode(!darkMode)}
+              aria-pressed={darkMode}
+              aria-label="Toggle dark mode"
+              className={"w-11 h-6 rounded-full relative focus-ring flex-shrink-0 "+(darkMode?'bg-[var(--purple)]':'bg-gray-200')}
+            >
+              <span className={"absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 "+(darkMode?'left-[22px]':'left-0.5')}></span>
+            </button>
+          </div>
+        </div>
+        <div>
+          <div className="font-bold text-sm mb-2">Notifications</div>
+          <div className="flex flex-col gap-2">
+            <ToggleRow label="Push Notifications" sub="Order updates & offers" value={notifPush} onChange={setNotifPush} />
+            <ToggleRow label="WhatsApp Updates" sub="Delivery status on WhatsApp" value={notifWhatsapp} onChange={setNotifWhatsapp} />
+            <ToggleRow label="Email Updates" sub="Order receipts & offers" value={notifEmail} onChange={setNotifEmail} />
+          </div>
+        </div>
+        <div>
+          <div className="font-bold text-sm mb-2">App</div>
+          <div className="card p-3.5 flex justify-between text-sm"><span className="text-[var(--muted)]">Language</span><span className="font-semibold">English</span></div>
+          <div className="card p-3.5 flex justify-between text-sm mt-2"><span className="text-[var(--muted)]">Currency</span><span className="font-semibold">INR (₹)</span></div>
+        </div>
+        <div>
+          <div className="font-bold text-sm mb-2 text-[var(--danger)]">Danger Zone</div>
+          {!confirmReset ? (
+            <button onClick={()=>setConfirmReset(true)} className="w-full py-2.5 text-sm font-bold text-[var(--danger)] border border-[var(--danger)] rounded-2xl focus-ring">Clear Cart, Wishlist &amp; Orders</button>
+          ) : (
+            <div className="card p-3.5 border-[var(--danger)]">
+              <div className="text-xs mb-2">This will erase your cart, wishlist, orders and saved address on this device. This can't be undone.</div>
+              <div className="flex gap-2">
+                <button onClick={()=>setConfirmReset(false)} className="flex-1 btn-secondary py-2 text-xs focus-ring">Cancel</button>
+                <button onClick={resetAllData} className="flex-1 py-2 text-xs font-bold text-white bg-[var(--danger)] rounded-2xl focus-ring">Yes, Clear It</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+
+  );
+}
+
+function EditProfileModal({onClose}){
+  const {address, setAddress, showToast} = useApp();
+  const [form, setForm] = useState({name:address.name, phone:address.phone, email:address.email||''});
+  const [errors, setErrors] = useState({});
+
+  const validate = ()=>{
+    const e = {};
+    if(!form.name.trim()) e.name = 'Name is required';
+    if(!/^\d{10}$/.test(form.phone.trim())) e.phone = 'Enter a valid 10-digit phone number';
+    if(form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email address';
+    setErrors(e);
+    return Object.keys(e).length===0;
+  };
+
+  const onSave = ()=>{
+    if(!validate()) return;
+    setAddress({...address, ...form});
+    showToast('Profile updated', '✅');
+    onClose();
+  };
+
+  return (
+    <Modal onClose={onClose} title="Edit Profile">
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Full Name</label>
+          <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          {errors.name && <div className="text-xs text-[var(--danger)] mt-1">{errors.name}</div>}
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Phone</label>
+          <input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value.replace(/\D/g,'').slice(0,10)})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          {errors.phone && <div className="text-xs text-[var(--danger)] mt-1">{errors.phone}</div>}
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Email (optional)</label>
+          <input value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          {errors.email && <div className="text-xs text-[var(--danger)] mt-1">{errors.email}</div>}
+        </div>
+        <button onClick={onSave} className="btn-primary w-full py-2.5 focus-ring">Save Changes</button>
+      </div>
+    </Modal>
+  );
+}
+
+function LogoutConfirmModal({onClose, onConfirm}){
+  return (
+    <Modal onClose={onClose} title="Log Out">
+      <div className="text-center">
+        <div className="text-4xl mb-2">🚪</div>
+        <p className="text-sm text-[var(--muted)]">Are you sure you want to log out? You can always log back in — your cart and orders will still be here.</p>
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 btn-secondary py-2.5 text-sm focus-ring">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 py-2.5 text-sm font-bold text-white bg-[var(--danger)] rounded-2xl focus-ring">Log Out</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function AccountPage(){
-  const {address, setAddress, orders, wishlist} = useApp();
+  const {address, orders, wishlist, setLoggedIn, showToast} = useApp();
+  const [editingProfile, setEditingProfile] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [storeInfoOpen, setStoreInfoOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [form, setForm] = useState(address);
   const sections = [
-    {icon:'📦', label:'My Orders', sub: orders.length+' orders', href:'#/orders'},
-    {icon:'♡', label:'Wishlist', sub: wishlist.length+' items', href:'#/wishlist'},
-    {icon:'🏠', label:'Saved Addresses', sub:'1 saved address', action:()=>setEditing(true)},
-    {icon:'💬', label:'Help & Support', sub:'FAQs, contact us', href:'#/account'},
-    {icon:'🏬', label:'Store Information', sub:'Timing, location', href:'#/account'},
-    {icon:'⚙️', label:'Settings', sub:'App preferences', href:'#/account'},
+    {IconC:Icon.Package, label:'My Orders', sub: orders.length+' orders', href:'#/orders'},
+    {IconC:Icon.Heart, label:'Wishlist', sub: wishlist.length+' items', href:'#/wishlist'},
+    {IconC:Icon.MapPin, label:'Saved Addresses', sub:'1 saved address', action:()=>setEditing(true)},
+    {IconC:Icon.Chat, label:'Help & Support', sub:'FAQs, contact us', action:()=>setHelpOpen(true)},
+    {IconC:Icon.Store, label:'Store Information', sub:'Timing, location', action:()=>setStoreInfoOpen(true)},
+    {IconC:Icon.Settings, label:'Settings', sub:'App preferences', action:()=>setSettingsOpen(true)},
   ];
+
+  const confirmLogout = ()=>{
+    setLoggingOut(false);
+    setLoggedIn(false);
+  };
+
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-8 max-w-2xl mx-auto">
       <div className="card p-4 flex items-center gap-4 mb-5">
         <div className="w-14 h-14 rounded-full bg-[var(--purple-light)] flex items-center justify-center text-2xl">👤</div>
-        <div>
+        <div className="flex-1">
           <div className="font-bold">{address.name}</div>
           <div className="text-xs text-[var(--muted)]">+91 {address.phone}</div>
+          {address.email && <div className="text-xs text-[var(--muted)]">{address.email}</div>}
         </div>
+        <button onClick={()=>setEditingProfile(true)} aria-label="Edit profile" className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring hover:bg-[var(--purple)] hover:text-white"><Icon.Edit /></button>
       </div>
       <div className="flex flex-col gap-2">
         {sections.map(s=> s.href ? (
           <a key={s.label} href={s.href} className="card p-3.5 flex items-center gap-3 focus-ring">
-            <span className="text-xl">{s.icon}</span>
+            <span className="w-10 h-10 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0"><s.IconC /></span>
             <div className="flex-1"><div className="text-sm font-semibold">{s.label}</div><div className="text-xs text-[var(--muted)]">{s.sub}</div></div>
             <span className="text-[var(--muted)]">›</span>
           </a>
         ) : (
           <button key={s.label} onClick={s.action} className="card p-3.5 flex items-center gap-3 text-left focus-ring">
-            <span className="text-xl">{s.icon}</span>
+            <span className="w-10 h-10 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0"><s.IconC /></span>
             <div className="flex-1"><div className="text-sm font-semibold">{s.label}</div><div className="text-xs text-[var(--muted)]">{s.sub}</div></div>
             <span className="text-[var(--muted)]">›</span>
           </button>
         ))}
+        <button onClick={()=>setLoggingOut(true)} className="card p-3.5 flex items-center gap-3 text-left focus-ring border-red-100">
+          <span className="w-10 h-10 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center flex-shrink-0"><Icon.Logout /></span>
+          <div className="flex-1"><div className="text-sm font-semibold text-[var(--danger)]">Log Out</div><div className="text-xs text-[var(--muted)]">Sign out of your account</div></div>
+          <span className="text-[var(--muted)]">›</span>
+        </button>
       </div>
       <div className="text-center text-xs text-[var(--muted)] mt-8">Meraki Stationery &amp; Toys · App version 1.0.0 (demo)</div>
 
+      {editingProfile && <EditProfileModal onClose={()=>setEditingProfile(false)} />}
+      {loggingOut && <LogoutConfirmModal onClose={()=>setLoggingOut(false)} onConfirm={confirmLogout} />}
       {editing && (
         <Modal onClose={()=>setEditing(false)} title="Saved Address">
           <div className="space-y-3">
             <div><label className="text-xs font-semibold text-[var(--muted)]">Full Name</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
             <div><label className="text-xs font-semibold text-[var(--muted)]">Phone</label><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
             <div><label className="text-xs font-semibold text-[var(--muted)]">Address</label><textarea value={form.line1} onChange={e=>setForm({...form,line1:e.target.value})} rows="2" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></textarea></div>
-            <button onClick={()=>{setAddress(form); setEditing(false);}} className="btn-primary w-full py-2.5 focus-ring">Save Address</button>
+            <SaveAddressButton form={form} onClose={()=>setEditing(false)} />
           </div>
         </Modal>
       )}
+      {storeInfoOpen && <StoreInfoModal onClose={()=>setStoreInfoOpen(false)} />}
+      {helpOpen && <HelpSupportModal onClose={()=>setHelpOpen(false)} />}
+      {settingsOpen && <SettingsModal onClose={()=>setSettingsOpen(false)} />}
     </div>
+  );
+}
+
+function SaveAddressButton({form, onClose}){
+  const {setAddress} = useApp();
+  return (
+    <button onClick={()=>{setAddress(prev=>({...prev, ...form})); onClose();}} className="btn-primary w-full py-2.5 focus-ring">Save Address</button>
   );
 }
 
@@ -1569,34 +2160,54 @@ function PageRouter({route}){
   }
 }
 
+function LoggedOutScreen(){
+  const {setLoggedIn} = useApp();
+  const onLogin = ()=>{
+    setLoggedIn(true);
+    navigate('#/home');
+  };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
+      <LogoBlock />
+      <div className="text-6xl mt-8 mb-2">👋</div>
+      <h1 className="font-display font-bold text-xl mt-2">You've been logged out</h1>
+      <p className="text-sm text-[var(--muted)] mt-2 max-w-xs">Your cart, wishlist and orders are safe. Log back in anytime to pick up where you left off.</p>
+      <button onClick={onLogin} className="btn-primary px-8 py-3 text-sm mt-6 focus-ring">Log In Again</button>
+    </div>
+  );
+}
+
+function AppShell({route, hash}){
+  const {loggedIn} = useApp();
+  const isCheckoutOrConfirm = route.parts[0]==='checkout' || route.parts[0]==='order-confirmation';
+  if(!loggedIn) return <LoggedOutScreen />;
+  return (
+    <div className="min-h-screen flex flex-col">
+      <MobileHeader route={route} />
+      <DesktopHeader route={route} />
+      <div className="flex-1">
+        <div key={hash} className="page-transition">
+          <PageRouter route={route} />
+        </div>
+      </div>
+      {!isCheckoutOrConfirm && <div className="mobile-only h-14"></div>}
+      {!isCheckoutOrConfirm && <BottomNav route={route} />}
+      <Toast />
+    </div>
+  );
+}
+
 function App(){
   const hash = useHashRoute();
   const route = parseRoute(hash);
-  const isCheckoutOrConfirm = route.parts[0]==='checkout' || route.parts[0]==='order-confirmation';
   return (
     <AppProvider>
-      <div className="min-h-screen flex flex-col">
-        <MobileHeader route={route} />
-        <DesktopHeader route={route} />
-        <div className="flex-1">
-          <PageRouter route={route} />
-        </div>
-        {!isCheckoutOrConfirm && <div className="mobile-only h-16"></div>}
-        {!isCheckoutOrConfirm && <BottomNav route={route} />}
-        <Toast />
-      </div>
+      <AppShell route={route} hash={hash} />
     </AppProvider>
   );
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
-    });
-  }
 </script>
 </body>
 </html>
