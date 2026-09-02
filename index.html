@@ -181,7 +181,7 @@ function P(id,name,category,sub,brand,price,mrp,rating,reviews,stock,emoji,bg,de
   return {id,name,category,sub,brand,price,mrp,discount,rating,reviews,stock,emoji,bg,desc,tags: tags||[], variants: variants||null};
 }
 
-const PRODUCTS = [
+const DEFAULT_PRODUCTS = [
   P('p1','Classmate Notebook (200 Pages)','stationery','Notebooks','Classmate',40,50,4.5,342,120,'📓','#DCEBFF','Single ruled long notebook with soft cover, ideal for daily school use.',['bestseller']),
   P('p2','Camlin Colour Pencils (12 Shades)','stationery','Colours','Camlin',85,110,4.6,201,80,'🖍️','#FFE3E9','Smooth, vivid colour pencils in a reusable tin box, 12 rich shades.',['bestseller']),
   P('p3','DOMS Brush Pens (14 Shades)','stationery','Colours','DOMS',120,150,4.7,128,64,'🖌️','#FFF1D6','Flexible-tip brush pens for colouring, sketching and lettering. Vibrant, non-toxic colours.',['bestseller']),
@@ -218,6 +218,18 @@ const PRODUCTS = [
 const uid = () => Math.random().toString(36).slice(2,9);
 const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
 const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
+
+const DEFAULT_BANNERS = [
+  {id:'b1', active:true, title:'Everything they need. Delivered with', highlight:'Care & Happiness! 💗', subtitle:'Stationery, Toys, Art & more — all in one place.', ctaLabel:'Shop Now', ctaLink:'#/category/stationery', bg:'linear-gradient(120deg,#EFE6FF,#F6EEFF)'},
+];
+
+const DEFAULT_STORE_SETTINGS = {
+  storeName:'Meraki Stationery & Toys',
+  addressLine:'Shop No. LG-06, Below HDFC Bank',
+  area:'Kalwar Road', city:'Jaipur', pincode:'302012',
+  phone:'8302416181', email:'hello@merakistore.in',
+  hoursWeekday:'10:00 AM – 9:30 PM', hoursSunday:'10:00 AM – 2:00 PM',
+};
 
 const DELIVERY_CHARGE = 30;
 const PACKAGING_CHARGE = 5;
@@ -276,6 +288,10 @@ function AppProvider({children}){
   const [cart, setCart] = useLocalState('meraki_cart', []); // [{id,qty}]
   const [wishlist, setWishlist] = useLocalState('meraki_wishlist', []); // [id]
   const [orders, setOrders] = useLocalState('meraki_orders', []);
+  const [products, setProducts] = useLocalState('meraki_products', DEFAULT_PRODUCTS);
+  const [banners, setBanners] = useLocalState('meraki_banners', DEFAULT_BANNERS);
+  const [storeSettings, setStoreSettings] = useLocalState('meraki_store_settings', DEFAULT_STORE_SETTINGS);
+  const [viewMode, setViewMode] = useLocalState('meraki_view_mode', 'customer'); // 'customer' | 'admin'
   const [address, setAddress] = useLocalState('meraki_address', {
     name:'Prashant Punia', phone:'8302416181', email:'prashant@example.com', line1:'Shop No. LG-06, Below HDFC Bank',
     area:'Kalwar Road', landmark:'Near HDFC Bank', pincode:'302012', city:'Jaipur', instructions:''
@@ -297,8 +313,8 @@ function AppProvider({children}){
   },[]);
 
   const productMap = useMemo(()=>{
-    const m = {}; PRODUCTS.forEach(p=> m[p.id]=p); return m;
-  },[]);
+    const m = {}; products.forEach(p=> m[p.id]=p); return m;
+  },[products]);
 
   const addToCart = useCallback((id, qty=1)=>{
     setCart(prev=>{
@@ -367,14 +383,50 @@ function AppProvider({children}){
     return order;
   },[cartLines, subtotal, deliveryCharge, packagingCharge, total, deliveryType, paymentMethod, address, setOrders, setCart]);
 
+  const updateOrderStatus = useCallback((orderId, newIndex)=>{
+    setOrders(prev=> prev.map(o=>{
+      if(o.id!==orderId) return o;
+      const cancelled = newIndex===-1;
+      return {...o, statusIndex: cancelled?0:newIndex, status: cancelled?'Cancelled':o.statusSteps[newIndex]};
+    }));
+  },[setOrders]);
+
+  const upsertProduct = useCallback((product)=>{
+    setProducts(prev=>{
+      const exists = prev.some(p=>p.id===product.id);
+      if(exists) return prev.map(p=> p.id===product.id ? product : p);
+      return [product, ...prev];
+    });
+  },[setProducts]);
+
+  const deleteProduct = useCallback((id)=>{
+    setProducts(prev=> prev.filter(p=>p.id!==id));
+  },[setProducts]);
+
+  const upsertBanner = useCallback((banner)=>{
+    setBanners(prev=>{
+      const exists = prev.some(b=>b.id===banner.id);
+      if(exists) return prev.map(b=> b.id===banner.id ? banner : b);
+      return [...prev, banner];
+    });
+  },[setBanners]);
+
+  const deleteBanner = useCallback((id)=>{
+    setBanners(prev=> prev.filter(b=>b.id!==id));
+  },[setBanners]);
+
   const value = {
     cart, cartLines, cartCount, subtotal, mrpTotal, savings, deliveryCharge, packagingCharge, total, amountToFreeDelivery,
     addToCart, setCartQty, removeFromCart,
     wishlist, toggleWishlist, moveWishlistToCart,
-    orders, placeOrder,
+    orders, placeOrder, updateOrderStatus,
     address, setAddress, deliveryType, setDeliveryType, paymentMethod, setPaymentMethod,
     loggedIn, setLoggedIn, darkMode, setDarkMode,
     showToast, toast, productMap,
+    products, setProducts, upsertProduct, deleteProduct,
+    banners, setBanners, upsertBanner, deleteBanner,
+    storeSettings, setStoreSettings,
+    viewMode, setViewMode,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
@@ -825,17 +877,18 @@ function ChangeLocationModal({onClose}){
 }
 
 function MobileFooterCompact(){
+  const {storeSettings:s} = useApp();
   return (
     <div className="mt-5 pt-5 border-t border-[var(--line)]">
       <div className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wide mb-2">Our Store</div>
-      <div className="text-xs text-[var(--muted)] leading-relaxed">Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur — 302012</div>
-      <div className="text-xs text-[var(--muted)] mt-1">📞 8302416181 · 10:00 AM – 9:30 PM</div>
+      <div className="text-xs text-[var(--muted)] leading-relaxed">{s.addressLine}, {s.area}, {s.city} — {s.pincode}</div>
+      <div className="text-xs text-[var(--muted)] mt-1">📞 {s.phone} · {s.hoursWeekday}</div>
       <div className="flex gap-3 mt-3 text-lg">
-        <a href="https://wa.me/918302416181" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className="focus-ring">💬</a>
-        <a href="tel:8302416181" aria-label="Call" className="focus-ring">📞</a>
-        <a href="mailto:hello@merakistore.in" aria-label="Email" className="focus-ring">✉️</a>
+        <a href={"https://wa.me/91"+s.phone} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className="focus-ring">💬</a>
+        <a href={"tel:"+s.phone} aria-label="Call" className="focus-ring">📞</a>
+        <a href={"mailto:"+s.email} aria-label="Email" className="focus-ring">✉️</a>
       </div>
-      <div className="text-center text-[10px] text-[var(--muted)]/70 mt-4">© 2026 Meraki Stationery &amp; Toys</div>
+      <div className="text-center text-[10px] text-[var(--muted)]/70 mt-4">© 2026 {s.storeName}</div>
     </div>
   );
 }
@@ -961,25 +1014,32 @@ function Modal({onClose, title, children}){
 /* ============================= HOME PAGE ============================= */
 
 function HomePage(){
-  const {wishlist, toggleWishlist} = useApp();
-  const popular = PRODUCTS.filter(p=>p.tags.includes('bestseller'));
+  const {wishlist, toggleWishlist, products, banners} = useApp();
+  const popular = products.filter(p=>p.tags.includes('bestseller'));
+  const activeBanners = banners.filter(b=>b.active!==false);
   return (
     <div className="fade-in">
-      <div className="mx-4 md:container-max md:mx-auto mt-4 rounded-2xl overflow-hidden relative" style={{background:'linear-gradient(120deg,#EFE6FF,#F6EEFF)'}}>
-        <div className="p-6 md:p-12 md:flex md:items-center md:justify-between relative z-10">
-          <div className="max-w-md">
-            <h1 className="font-display font-extrabold text-2xl md:text-4xl leading-tight">
-              Everything they need. Delivered with <span className="text-[var(--danger)]">Care &amp; Happiness!</span> <span>💗</span>
-            </h1>
-            <p className="text-sm md:text-base text-[var(--muted)] mt-3">Stationery, Toys, Art &amp; more — all in one place.</p>
-            <div className="flex gap-3 mt-5">
-              <a href="#/category/stationery" className="btn-primary px-5 py-2.5 text-sm focus-ring">Shop Now</a>
-              <a href="#/account" className="btn-secondary px-5 py-2.5 text-sm focus-ring">🏬 Store Pickup</a>
+      <div className="px-4 md:container-max md:mx-auto mt-4">
+        <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+          {(activeBanners.length ? activeBanners : DEFAULT_BANNERS).map(banner=> (
+            <div key={banner.id} className="snap-item flex-shrink-0 w-full rounded-2xl overflow-hidden relative" style={{background: banner.bg || 'linear-gradient(120deg,#EFE6FF,#F6EEFF)'}}>
+              <div className="p-6 md:p-12 md:flex md:items-center md:justify-between relative z-10">
+                <div className="max-w-md">
+                  <h1 className="font-display font-extrabold text-2xl md:text-4xl leading-tight">
+                    {banner.title} <span className="text-[var(--danger)]">{banner.highlight}</span>
+                  </h1>
+                  <p className="text-sm md:text-base text-[var(--muted)] mt-3">{banner.subtitle}</p>
+                  <div className="flex gap-3 mt-5">
+                    <a href={banner.ctaLink || '#/category/stationery'} className="btn-primary px-5 py-2.5 text-sm focus-ring">{banner.ctaLabel || 'Shop Now'}</a>
+                    <a href="#/account" className="btn-secondary px-5 py-2.5 text-sm focus-ring">🏬 Store Pickup</a>
+                  </div>
+                </div>
+                <div className="hidden md:flex items-center gap-3 text-7xl mt-6 md:mt-0">
+                  <span>🎒</span><span>🧸</span><span>🖍️</span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="hidden md:flex items-center gap-3 text-7xl mt-6 md:mt-0">
-            <span>🎒</span><span>🧸</span><span>🖍️</span>
-          </div>
+          ))}
         </div>
       </div>
 
@@ -1014,6 +1074,7 @@ function HomePage(){
 }
 
 function Footer(){
+  const {storeSettings:s} = useApp();
   return (
     <div className="desktop-only mt-10 bg-[var(--ink)] text-white/80 px-6 py-8 text-sm">
       <div className="container-max grid md:grid-cols-4 gap-6">
@@ -1040,8 +1101,8 @@ function Footer(){
         </div>
         <div>
           <div className="font-bold text-white mb-2 text-xs uppercase tracking-wide">Our Store</div>
-          <div className="text-white/60 text-xs">Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur — 302012</div>
-          <div className="text-white/60 text-xs mt-1">📞 8302416181 · 10:00 AM – 9:30 PM</div>
+          <div className="text-white/60 text-xs">{s.addressLine}, {s.area}, {s.city} — {s.pincode}</div>
+          <div className="text-white/60 text-xs mt-1">📞 {s.phone} · {s.hoursWeekday}</div>
         </div>
       </div>
       <div className="text-center text-white/30 text-[11px] mt-6">© 2026 Meraki Stationery &amp; Toys. All rights reserved.</div>
@@ -1062,8 +1123,9 @@ function CategoryPage({route}){
   const [inStockOnly, setInStockOnly] = useState(false);
   const [subFilter, setSubFilter] = useState('all');
   const [view, setView] = useState('grid');
+  const {products} = useApp();
 
-  const base = PRODUCTS.filter(p=>p.category===catId);
+  const base = products.filter(p=>p.category===catId);
   const subcats = useMemo(()=> Array.from(new Set(base.map(p=>p.sub))), [catId]);
   const brands = useMemo(()=> Array.from(new Set(base.map(p=>p.brand))), [catId]);
 
@@ -1176,7 +1238,7 @@ function FilterPanel({subcats, subFilter, setSubFilter, priceMax, setPriceMax, b
 
 function ProductPage({route}){
   const id = route.parts[1];
-  const {productMap, cart, addToCart, wishlist, toggleWishlist, address, showToast} = useApp();
+  const {productMap, products, cart, addToCart, wishlist, toggleWishlist, address, showToast} = useApp();
   const product = productMap[id];
   const [qty, setQty] = useState(1);
   const [shareOpen, setShareOpen] = useState(false);
@@ -1188,7 +1250,7 @@ function ProductPage({route}){
 
   const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
-  const related = PRODUCTS.filter(p=> p.category===product.category && p.id!==product.id).slice(0,8);
+  const related = products.filter(p=> p.category===product.category && p.id!==product.id).slice(0,8);
   const selectedVariant = product.variants ? product.variants[variantIdx] : null;
 
   const onAddToCartClick = ()=>{
@@ -1674,17 +1736,18 @@ function statusColor(status){
   return 'amber';
 }
 
-function downloadInvoice(order){
+function downloadInvoice(order, storeSettings){
+  const s = storeSettings || DEFAULT_STORE_SETTINGS;
   try{
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     let y = 20;
 
     doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(108,63,197);
-    doc.text('Meraki Stationery & Toys', 14, y);
+    doc.text(s.storeName, 14, y);
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90,90,90);
-    y += 6; doc.text('Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur - 302012', 14, y);
-    y += 5; doc.text('Phone: 8302416181  ·  hello@merakistore.in', 14, y);
+    y += 6; doc.text(s.addressLine+', '+s.area+', '+s.city+' - '+s.pincode, 14, y);
+    y += 5; doc.text('Phone: '+s.phone+'  ·  '+s.email, 14, y);
 
     y += 10; doc.setDrawColor(230,225,245); doc.line(14, y, 196, y);
     y += 10; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(30,20,50);
@@ -1745,7 +1808,7 @@ function downloadInvoice(order){
 }
 
 function OrdersPage(){
-  const {orders} = useApp();
+  const {orders, storeSettings} = useApp();
   if(orders.length===0){
     return (
       <div className="fade-in text-center py-20 px-4">
@@ -1776,7 +1839,7 @@ function OrdersPage(){
             <div className="flex justify-between items-center mt-3">
               <span className="text-sm font-bold">{inr(o.total)}</span>
               <div className="flex items-center gap-3">
-                <button onClick={(e)=>{e.preventDefault(); e.stopPropagation(); downloadInvoice(o);}} className="text-xs font-bold text-[var(--muted)] hover:text-[var(--purple)] focus-ring flex items-center gap-1">⬇️ Invoice</button>
+                <button onClick={(e)=>{e.preventDefault(); e.stopPropagation(); downloadInvoice(o, storeSettings);}} className="text-xs font-bold text-[var(--muted)] hover:text-[var(--purple)] focus-ring flex items-center gap-1">⬇️ Invoice</button>
                 <span className="text-xs font-bold text-[var(--purple)]">View Details ›</span>
               </div>
             </div>
@@ -1789,7 +1852,7 @@ function OrdersPage(){
 
 function OrderDetailPage({route}){
   const orderId = route.parts[1];
-  const {orders} = useApp();
+  const {orders, storeSettings} = useApp();
   const order = orders.find(o=>o.id===orderId);
   const [helpOpen, setHelpOpen] = useState(false);
   if(!order) return <div className="p-8 text-center text-[var(--muted)]">Order not found. <a className="text-[var(--purple)] font-semibold" href="#/orders">Back to orders</a></div>;
@@ -1798,7 +1861,7 @@ function OrderDetailPage({route}){
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-10 max-w-lg mx-auto">
       <div className="flex items-center justify-between mb-1">
         <h1 className="font-display font-bold text-lg">Order #{order.id}</h1>
-        <button onClick={()=>downloadInvoice(order)} className="text-xs font-bold text-[var(--purple)] flex items-center gap-1 focus-ring">⬇️ Invoice</button>
+        <button onClick={()=>downloadInvoice(order, storeSettings)} className="text-xs font-bold text-[var(--purple)] flex items-center gap-1 focus-ring">⬇️ Invoice</button>
       </div>
       <div className="text-xs text-[var(--muted)] mb-4">Placed on {new Date(order.date).toLocaleString()}</div>
 
@@ -1858,9 +1921,10 @@ function SearchPage(){
   const route = parseRoute(window.location.hash);
   const q = (route.query.q||'').toLowerCase().trim();
   const [term, setTerm] = useState(q);
+  const {products} = useApp();
   useEffect(()=> setTerm(q), [q]);
 
-  const results = term ? PRODUCTS.filter(p=>
+  const results = term ? products.filter(p=>
     p.name.toLowerCase().includes(term) ||
     p.category.toLowerCase().includes(term) ||
     p.sub.toLowerCase().includes(term) ||
@@ -1897,9 +1961,9 @@ function SearchPage(){
 /* ============================= WISHLIST ============================= */
 
 function WishlistPage(){
-  const {wishlist, productMap, moveWishlistToCart, toggleWishlist} = useApp();
+  const {wishlist, productMap, moveWishlistToCart, toggleWishlist, products} = useApp();
   const items = wishlist.map(id=>productMap[id]).filter(Boolean);
-  const recommended = PRODUCTS.filter(p=> !wishlist.includes(p.id) && p.tags.includes('bestseller')).slice(0,8);
+  const recommended = products.filter(p=> !wishlist.includes(p.id) && p.tags.includes('bestseller')).slice(0,8);
 
   if(items.length===0){
     return (
@@ -1977,16 +2041,17 @@ function AccordionItem({q, a}){
 }
 
 function StoreInfoModal({onClose}){
-  const storeAddress = "Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur - 302012";
+  const {storeSettings:s} = useApp();
+  const storeAddress = s.addressLine+", "+s.area+", "+s.city+" - "+s.pincode;
   const hours = [
-    ['Monday - Saturday','10:00 AM – 9:30 PM'],
-    ['Sunday','10:00 AM – 2:00 PM'],
+    ['Monday - Saturday', s.hoursWeekday],
+    ['Sunday', s.hoursSunday],
   ];
   return (
     <Modal onClose={onClose} title="Store Information">
       <div className="space-y-4 text-sm">
         <div className="card p-3.5">
-          <div className="font-bold flex items-center gap-1.5">🏬 Meraki Stationery &amp; Toys</div>
+          <div className="font-bold flex items-center gap-1.5">🏬 {s.storeName}</div>
           <div className="text-xs text-[var(--muted)] mt-1">{storeAddress}</div>
         </div>
         <div>
@@ -2001,7 +2066,7 @@ function StoreInfoModal({onClose}){
         </div>
         <div className="grid grid-cols-2 gap-3">
           <a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(storeAddress)} target="_blank" rel="noopener noreferrer" className="btn-secondary py-2.5 text-sm text-center focus-ring">📍 Get Directions</a>
-          <a href="tel:8302416181" className="btn-primary py-2.5 text-sm text-center focus-ring">📞 Call Store</a>
+          <a href={"tel:"+s.phone} className="btn-primary py-2.5 text-sm text-center focus-ring">📞 Call Store</a>
         </div>
       </div>
     </Modal>
@@ -2009,20 +2074,21 @@ function StoreInfoModal({onClose}){
 }
 
 function HelpSupportModal({onClose}){
+  const {storeSettings:s} = useApp();
   const faqs = [
     {q:'How long does delivery take?', a:"Most orders in Jaipur are delivered within 2-4 hours. You can also choose Store Pickup at checkout if you'd like it sooner."},
     {q:'What is your return policy?', a:'Unused items in original packaging can be returned within 7 days of delivery. Refunds are processed to your original payment method within 3-5 business days.'},
     {q:'How do I track my order?', a:'Go to Account → My Orders and tap any order to see live status, from Order Confirmed all the way to Delivered.'},
-    {q:'Do you offer store pickup?', a:'Yes! Choose Store Pickup at checkout and your order will be ready at our Kalwar Road store, usually within 2 hours.'},
+    {q:'Do you offer store pickup?', a:'Yes! Choose Store Pickup at checkout and your order will be ready at our '+s.area+' store, usually within 2 hours.'},
     {q:'Can I change my delivery address after ordering?', a:"Please call or WhatsApp us within 15 minutes of placing the order and we'll do our best to update it before it ships."},
   ];
   return (
     <Modal onClose={onClose} title="Help & Support">
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-2">
-          <a href="tel:8302416181" className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">📞</span><span className="text-[11px] font-bold">Call Us</span></a>
-          <a href="https://wa.me/918302416181" target="_blank" rel="noopener noreferrer" className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">💬</span><span className="text-[11px] font-bold">WhatsApp</span></a>
-          <a href="mailto:hello@merakistore.in" className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">✉️</span><span className="text-[11px] font-bold">Email</span></a>
+          <a href={"tel:"+s.phone} className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">📞</span><span className="text-[11px] font-bold">Call Us</span></a>
+          <a href={"https://wa.me/91"+s.phone} target="_blank" rel="noopener noreferrer" className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">💬</span><span className="text-[11px] font-bold">WhatsApp</span></a>
+          <a href={"mailto:"+s.email} className="card p-3 flex flex-col items-center gap-1 text-center focus-ring"><span className="text-lg">✉️</span><span className="text-[11px] font-bold">Email</span></a>
         </div>
         <div>
           <div className="font-bold text-sm mb-2">Frequently Asked Questions</div>
@@ -2355,6 +2421,518 @@ function SaveAddressButton({form, onClose}){
 
 /* ============================= APP SHELL ============================= */
 
+/* ============================= ADMIN PANEL ============================= */
+
+function AdminLogin({onSuccess}){
+  const [pass, setPass] = useState('');
+  const [error, setError] = useState('');
+  const submit = (e)=>{
+    e.preventDefault();
+    if(pass === 'admin123'){ setError(''); onSuccess(); }
+    else setError('Incorrect password. Try "admin123" for this demo.');
+  };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
+      <LogoBlock />
+      <div className="text-5xl mt-8 mb-2">🔐</div>
+      <h1 className="font-display font-bold text-xl mt-2">Shop Owner Login</h1>
+      <p className="text-sm text-[var(--muted)] mt-2 max-w-xs">Manage products, banners and orders for Meraki Stationery &amp; Toys.</p>
+      <form onSubmit={submit} className="w-full max-w-xs mt-6 space-y-3">
+        <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Admin password"
+          className="w-full border border-[var(--line)] rounded-lg px-3 py-2.5 text-sm text-center focus-ring" autoFocus />
+        {error && <div className="text-xs text-[var(--danger)] font-semibold">{error}</div>}
+        <button type="submit" className="btn-primary w-full py-3 text-sm focus-ring">Log In to Admin</button>
+      </form>
+      <div className="text-[11px] text-[var(--muted)] mt-4 bg-[var(--purple-light)] rounded-xl px-3 py-2 max-w-xs">Demo password: <b>admin123</b></div>
+      <a href="#/home" onClick={()=>navigate('#/home')} className="text-sm font-bold text-[var(--purple)] mt-6 focus-ring">← Back to Store</a>
+    </div>
+  );
+}
+
+const ADMIN_NAV = [
+  {key:'dashboard', label:'Dashboard', Icon:Icon.Grid, href:'#/admin/dashboard'},
+  {key:'products', label:'Products', Icon:Icon.Package, href:'#/admin/products'},
+  {key:'orders', label:'Orders', Icon:Icon.Box, href:'#/admin/orders'},
+  {key:'banners', label:'Banners', Icon:Icon.Bolt, href:'#/admin/banners'},
+  {key:'settings', label:'Store Settings', Icon:Icon.Settings, href:'#/admin/settings'},
+];
+
+function AdminBottomNav({section}){
+  return (
+    <div className="mobile-only fixed bottom-0 left-0 right-0 z-40 px-3 pb-2.5 safe-bottom pointer-events-none">
+      <div className="floating-nav pointer-events-auto flex justify-between items-center px-3 py-1.5 max-w-[300px] mx-auto">
+        {ADMIN_NAV.map(n=>{
+          const isActive = section===n.key;
+          return (
+            <a key={n.key} href={n.href} aria-label={n.label} className={"nav-item flex items-center justify-center py-1 px-0.5 focus-ring "+(isActive?'active text-[var(--purple)]':'text-[var(--muted)]')}>
+              <span className="nav-icon"><n.Icon active={isActive} /></span>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AdminShell({route, onExit}){
+  const section = route.parts[1] || 'dashboard';
+  const sectionLabel = (ADMIN_NAV.find(n=>n.key===section)||{}).label || 'Dashboard';
+
+  return (
+    <div className="min-h-screen flex" style={{background:'#F8F6FC'}}>
+      {/* Desktop sidebar */}
+      <div className="desktop-only w-60 flex-shrink-0 bg-white border-r border-[var(--line)] flex flex-col p-4 sticky top-0 h-screen">
+        <div className="mb-6 px-1"><LogoBlock /><div className="text-[10px] font-bold text-[var(--purple)] mt-1 bg-[var(--purple-light)] inline-block px-2 py-0.5 rounded-full">SHOP ADMIN</div></div>
+        <div className="flex flex-col gap-1 flex-1">
+          {ADMIN_NAV.map(n=> (
+            <a key={n.key} href={n.href} className={"flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold focus-ring "+(section===n.key ? 'bg-[var(--purple-light)] text-[var(--purple)]' : 'text-[var(--ink)] hover:bg-gray-50')}>
+              <n.Icon active={section===n.key} />{n.label}
+            </a>
+          ))}
+        </div>
+        <div className="flex flex-col gap-1 pt-3 border-t border-[var(--line)]">
+          <a href="#/home" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-[var(--ink)] hover:bg-gray-50 focus-ring"><Icon.Store />View Storefront</a>
+          <button onClick={onExit} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-[var(--danger)] hover:bg-red-50 focus-ring text-left"><Icon.Logout />Log Out</button>
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        {/* Mobile top bar */}
+        <div className="mobile-only sticky top-0 z-40 bg-white border-b border-[var(--line)] flex items-center gap-3 px-4 py-3">
+          <div className="flex-1">
+            <div className="font-display font-bold text-base leading-none">{sectionLabel}</div>
+            <div className="text-[10px] font-bold text-[var(--purple)] mt-0.5">SHOP ADMIN</div>
+          </div>
+          <a href="#/home" aria-label="View storefront" className="w-9 h-9 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring text-[var(--ink)]"><Icon.Store /></a>
+          <button onClick={onExit} aria-label="Log out" className="w-9 h-9 rounded-full hover:bg-red-50 flex items-center justify-center focus-ring text-[var(--danger)]"><Icon.Logout /></button>
+        </div>
+        <div className="desktop-only sticky top-0 z-30 bg-white border-b border-[var(--line)] px-8 py-4">
+          <h1 className="font-display font-bold text-xl">{sectionLabel}</h1>
+        </div>
+
+        <div className="p-4 md:p-8 pb-24 md:pb-8">
+          {section==='dashboard' && <AdminDashboard />}
+          {section==='products' && <AdminProducts />}
+          {section==='orders' && <AdminOrders />}
+          {section==='banners' && <AdminBanners />}
+          {section==='settings' && <AdminSettings />}
+        </div>
+        <div className="mobile-only h-14"></div>
+      </div>
+
+      <AdminBottomNav section={section} />
+    </div>
+  );
+}
+
+function StatCard({label, value, icon, tone}){
+  const tones = {purple:'text-[var(--purple)] bg-[var(--purple-light)]', green:'text-[var(--green)] bg-[var(--green-light)]', amber:'text-amber-600 bg-amber-50', danger:'text-[var(--danger)] bg-red-50'};
+  return (
+    <div className="card p-4">
+      <div className={"w-10 h-10 rounded-full flex items-center justify-center text-lg mb-3 "+(tones[tone]||tones.purple)}>{icon}</div>
+      <div className="text-2xl font-bold font-display">{value}</div>
+      <div className="text-xs text-[var(--muted)] mt-0.5">{label}</div>
+    </div>
+  );
+}
+
+function AdminDashboard(){
+  const {orders, products} = useApp();
+  const totalRevenue = orders.reduce((s,o)=> s+o.total, 0);
+  const pendingOrders = orders.filter(o=> o.status!=='Delivered' && o.status!=='Cancelled').length;
+  const lowStock = products.filter(p=> p.stock <= 20);
+  const recent = orders.slice(0,6);
+
+  return (
+    <div className="fade-in max-w-5xl">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Total Orders" value={orders.length} icon="📦" tone="purple" />
+        <StatCard label="Total Revenue" value={inr(totalRevenue)} icon="💰" tone="green" />
+        <StatCard label="Pending Orders" value={pendingOrders} icon="⏳" tone="amber" />
+        <StatCard label="Products Listed" value={products.length} icon="🏷️" tone="purple" />
+      </div>
+
+      {lowStock.length>0 && (
+        <div className="card p-4 mt-4 border-amber-200">
+          <div className="font-bold text-sm mb-2 flex items-center gap-2">⚠️ Low Stock Alert</div>
+          <div className="flex flex-wrap gap-2">
+            {lowStock.slice(0,8).map(p=> (
+              <a key={p.id} href="#/admin/products" className="chip bg-amber-50 border-amber-200 focus-ring">{p.name} · {p.stock} left</a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card p-4 mt-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-bold text-sm">Recent Orders</div>
+          <a href="#/admin/orders" className="text-xs font-bold text-[var(--purple)] focus-ring">View All ›</a>
+        </div>
+        {recent.length===0 ? (
+          <div className="text-sm text-[var(--muted)] text-center py-6">No orders yet.</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {recent.map(o=> (
+              <div key={o.id} className="flex items-center justify-between text-sm py-2 border-b border-[var(--line)] last:border-0">
+                <div>
+                  <div className="font-semibold">#{o.id}</div>
+                  <div className="text-xs text-[var(--muted)]">{new Date(o.date).toLocaleDateString()} · {o.items.length} items</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold">{inr(o.total)}</span>
+                  <Badge tone={statusColor(o.status)}>{o.status}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function emptyProductForm(){
+  return {id:'', name:'', category:'stationery', sub:'', brand:'', price:'', mrp:'', stock:'', emoji:'📦', bg:'#F1EBFB', desc:'', tags:[], variants:null};
+}
+
+function AdminProductFormModal({product, onClose}){
+  const {upsertProduct, showToast} = useApp();
+  const [form, setForm] = useState(product ? {...product, price:String(product.price), mrp:String(product.mrp), stock:String(product.stock)} : emptyProductForm());
+  const isEdit = Boolean(product);
+
+  const save = ()=>{
+    if(!form.name.trim() || !form.sub.trim() || !form.brand.trim() || !form.price || !form.mrp){
+      showToast('Please fill in all required fields','⚠️');
+      return;
+    }
+    const price = Number(form.price), mrp = Number(form.mrp);
+    const discount = mrp>0 ? Math.round(((mrp-price)/mrp)*100) : 0;
+    const finalProduct = {
+      ...form,
+      id: form.id || ('p'+uid()),
+      price, mrp, discount,
+      stock: Number(form.stock)||0,
+      rating: form.rating || 4.5,
+      reviews: form.reviews || 0,
+      tags: form.isBestseller ? ['bestseller'] : (form.tags||[]),
+    };
+    delete finalProduct.isBestseller;
+    upsertProduct(finalProduct);
+    showToast(isEdit ? 'Product updated' : 'Product added', '✅');
+    onClose();
+  };
+
+  return (
+    <Modal onClose={onClose} title={isEdit ? 'Edit Product' : 'Add Product'}>
+      <div className="space-y-3">
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Product Name</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-[var(--muted)]">Category</label>
+            <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+              {CATEGORIES.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Sub-category</label><input value={form.sub} onChange={e=>setForm({...form,sub:e.target.value})} placeholder="e.g. Notebooks" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Brand</label><input value={form.brand} onChange={e=>setForm({...form,brand:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Stock Quantity</label><input type="number" value={form.stock} onChange={e=>setForm({...form,stock:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Selling Price (₹)</label><input type="number" value={form.price} onChange={e=>setForm({...form,price:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">MRP (₹)</label><input type="number" value={form.mrp} onChange={e=>setForm({...form,mrp:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Emoji Icon</label><input value={form.emoji} onChange={e=>setForm({...form,emoji:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring text-center text-lg" /></div>
+          <div>
+            <label className="text-xs font-semibold text-[var(--muted)]">Card Colour</label>
+            <input type="color" value={form.bg} onChange={e=>setForm({...form,bg:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg h-[38px] px-1 focus-ring" />
+          </div>
+        </div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Description</label><textarea value={form.desc} onChange={e=>setForm({...form,desc:e.target.value})} rows="2" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></textarea></div>
+        <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.tags && form.tags.includes('bestseller')} onChange={e=>setForm({...form, isBestseller:e.target.checked, tags:e.target.checked?['bestseller']:[]})} /> Mark as Bestseller</label>
+        <button onClick={save} className="btn-primary w-full py-2.5 focus-ring">{isEdit ? 'Save Changes' : 'Add Product'}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function AdminProducts(){
+  const {products, deleteProduct, showToast} = useApp();
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState('all');
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const filtered = products.filter(p=>
+    (catFilter==='all' || p.category===catFilter) &&
+    (search.trim()==='' || p.name.toLowerCase().includes(search.toLowerCase()) || p.brand.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const openAdd = ()=>{ setEditingProduct(null); setFormOpen(true); };
+  const openEdit = (p)=>{ setEditingProduct(p); setFormOpen(true); };
+  const confirmDelete = ()=>{ deleteProduct(deleteConfirm.id); showToast('Product deleted','🗑️'); setDeleteConfirm(null); };
+
+  return (
+    <div className="fade-in max-w-5xl">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search products..." className="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring flex-1 min-w-[160px]" />
+        <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} className="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+          <option value="all">All Categories</option>
+          {CATEGORIES.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <button onClick={openAdd} className="btn-primary px-4 py-2 text-sm focus-ring">+ Add Product</button>
+      </div>
+
+      <div className="text-xs text-[var(--muted)] mb-2">{filtered.length} products</div>
+      <div className="flex flex-col gap-2">
+        {filtered.map(p=> (
+          <div key={p.id} className="card p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <ProductImg product={p} className="w-12 h-12 text-xl flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold line-clamp-1">{p.name}</div>
+                <div className="text-xs text-[var(--muted)]">{p.brand} · {p.sub}</div>
+                <div className="text-xs mt-0.5 sm:hidden">
+                  <span className="font-bold">{inr(p.price)}</span> · <span className={p.stock<=20?'text-[var(--danger)] font-semibold':'text-[var(--muted)]'}>{p.stock} in stock</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 sm:ml-auto flex-shrink-0">
+              <div className="text-right hidden sm:block">
+                <div className="text-sm font-bold">{inr(p.price)}</div>
+                <div className={"text-xs font-semibold "+(p.stock<=20 ? 'text-[var(--danger)]' : 'text-[var(--muted)]')}>{p.stock} in stock</div>
+              </div>
+              <button onClick={()=>openEdit(p)} aria-label="Edit product" className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring flex-shrink-0"><Icon.Edit/></button>
+              <button onClick={()=>setDeleteConfirm(p)} aria-label="Delete product" className="w-9 h-9 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring flex-shrink-0"><Icon.Close/></button>
+            </div>
+          </div>
+        ))}
+        {filtered.length===0 && <div className="text-center text-sm text-[var(--muted)] py-10">No products match your search.</div>}
+      </div>
+
+      {formOpen && <AdminProductFormModal product={editingProduct} onClose={()=>setFormOpen(false)} />}
+      {deleteConfirm && (
+        <Modal onClose={()=>setDeleteConfirm(null)} title="Delete Product">
+          <p className="text-sm text-[var(--muted)]">Delete <b>{deleteConfirm.name}</b>? This can't be undone.</p>
+          <div className="flex gap-3 mt-5">
+            <button onClick={()=>setDeleteConfirm(null)} className="flex-1 btn-secondary py-2.5 text-sm focus-ring">Cancel</button>
+            <button onClick={confirmDelete} className="flex-1 py-2.5 text-sm font-bold text-white bg-[var(--danger)] rounded-2xl focus-ring">Delete</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+const ORDER_STATUS_STEPS = ['Order Confirmed','Preparing Your Order','Out for Delivery','Delivered'];
+
+function AdminOrderDetailModal({order, onClose}){
+  const {updateOrderStatus, storeSettings} = useApp();
+  return (
+    <Modal onClose={onClose} title={'Order #'+order.id}>
+      <div className="space-y-4 text-sm">
+        <div>
+          <div className="font-bold mb-1.5">Update Status</div>
+          <div className="flex flex-wrap gap-2">
+            {ORDER_STATUS_STEPS.map((s,i)=> (
+              <button key={s} onClick={()=>updateOrderStatus(order.id, i)}
+                className={"chip "+((order.statusIndex===i && order.status!=='Cancelled')?'active':'')}>{s}</button>
+            ))}
+            <button onClick={()=>updateOrderStatus(order.id, -1)} className={"chip "+(order.status==='Cancelled'?'active bg-[var(--danger)] border-[var(--danger)]':'')}>Cancel Order</button>
+          </div>
+        </div>
+        <div className="card p-3.5">
+          <div className="font-bold mb-1">Customer & Delivery</div>
+          <div className="text-xs text-[var(--muted)]">{order.address.name} · +91 {order.address.phone}</div>
+          <div className="text-xs text-[var(--muted)]">{order.address.line1}, {order.address.area}, {order.address.city} - {order.address.pincode}</div>
+          <div className="text-xs text-[var(--muted)] mt-1">Payment: {PAYMENT_LABELS[order.paymentMethod]} · {order.deliveryType==='home'?'Home Delivery':'Store Pickup'}</div>
+        </div>
+        <div className="card p-3.5">
+          <div className="font-bold mb-2">Items</div>
+          {order.items.map(it=> (
+            <div key={it.id} className="flex justify-between text-xs py-1"><span className="text-[var(--muted)]">{it.name} x{it.qty}</span><span>{inr(it.price*it.qty)}</span></div>
+          ))}
+          <div className="border-t border-dashed border-[var(--line)] my-2"></div>
+          <div className="flex justify-between font-bold text-sm"><span>Total</span><span>{inr(order.total)}</span></div>
+        </div>
+        <button onClick={()=>downloadInvoice(order, storeSettings)} className="btn-secondary w-full py-2.5 text-sm focus-ring">⬇️ Download Invoice</button>
+      </div>
+    </Modal>
+  );
+}
+
+function AdminOrders(){
+  const {orders} = useApp();
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [selected, setSelected] = useState(null);
+
+  const filtered = statusFilter==='all' ? orders : orders.filter(o=>o.status===statusFilter);
+  const statuses = ['all', ...ORDER_STATUS_STEPS, 'Cancelled'];
+
+  return (
+    <div className="fade-in max-w-5xl">
+      <div className="flex gap-2 overflow-x-auto scrollbar-none mb-4">
+        {statuses.map(s=> (
+          <button key={s} onClick={()=>setStatusFilter(s)} className={"chip "+(statusFilter===s?'active':'')}>{s==='all'?'All Orders':s}</button>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2">
+        {filtered.map(o=> (
+          <button key={o.id} onClick={()=>setSelected(o)} className="card p-3.5 flex items-center gap-3 text-left w-full focus-ring">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold">#{o.id}</div>
+              <div className="text-xs text-[var(--muted)]">{o.address.name} · {new Date(o.date).toLocaleDateString()} · {o.items.length} items</div>
+            </div>
+            <span className="font-bold text-sm">{inr(o.total)}</span>
+            <Badge tone={statusColor(o.status)}>{o.status}</Badge>
+          </button>
+        ))}
+        {filtered.length===0 && <div className="text-center text-sm text-[var(--muted)] py-10">No orders in this status.</div>}
+      </div>
+      {selected && <AdminOrderDetailModal order={selected} onClose={()=>setSelected(null)} />}
+    </div>
+  );
+}
+
+function emptyBannerForm(){
+  return {id:'', active:true, title:'', highlight:'', subtitle:'', ctaLabel:'Shop Now', ctaLink:'#/category/stationery', bg:'#EFE6FF'};
+}
+
+function AdminBannerFormModal({banner, onClose}){
+  const {upsertBanner, showToast} = useApp();
+  const [form, setForm] = useState(banner ? {...banner} : emptyBannerForm());
+  const isEdit = Boolean(banner);
+
+  const save = ()=>{
+    if(!form.title.trim()){ showToast('Please add a banner title','⚠️'); return; }
+    const finalBanner = {...form, id: form.id || ('b'+uid()), bg: form.bg.startsWith('linear') ? form.bg : `linear-gradient(120deg, ${form.bg}, #ffffff)`};
+    upsertBanner(finalBanner);
+    showToast(isEdit ? 'Banner updated' : 'Banner added', '✅');
+    onClose();
+  };
+
+  return (
+    <Modal onClose={onClose} title={isEdit ? 'Edit Banner' : 'Add Banner'}>
+      <div className="space-y-3">
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Title</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Everything they need. Delivered with" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Highlight (coloured text)</label><input value={form.highlight} onChange={e=>setForm({...form,highlight:e.target.value})} placeholder="Care & Happiness! 💗" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Subtitle</label><input value={form.subtitle} onChange={e=>setForm({...form,subtitle:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Button Label</label><input value={form.ctaLabel} onChange={e=>setForm({...form,ctaLabel:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Button Link</label><input value={form.ctaLink} onChange={e=>setForm({...form,ctaLink:e.target.value})} placeholder="#/category/toys" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Background Colour</label>
+          <input type="color" value={form.bg.startsWith('#')?form.bg:'#EFE6FF'} onChange={e=>setForm({...form,bg:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg h-[38px] px-1 focus-ring" />
+        </div>
+        <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})} /> Active (visible on homepage)</label>
+        <button onClick={save} className="btn-primary w-full py-2.5 focus-ring">{isEdit ? 'Save Changes' : 'Add Banner'}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function AdminBanners(){
+  const {banners, deleteBanner, showToast} = useApp();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const openAdd = ()=>{ setEditingBanner(null); setFormOpen(true); };
+  const openEdit = (b)=>{ setEditingBanner(b); setFormOpen(true); };
+  const confirmDelete = ()=>{ deleteBanner(deleteConfirm.id); showToast('Banner deleted','🗑️'); setDeleteConfirm(null); };
+
+  return (
+    <div className="fade-in max-w-3xl">
+      <div className="flex justify-end mb-4">
+        <button onClick={openAdd} className="btn-primary px-4 py-2 text-sm focus-ring">+ Add Banner</button>
+      </div>
+      <div className="flex flex-col gap-3">
+        {banners.map(b=> (
+          <div key={b.id} className="card p-4">
+            <div className="rounded-xl p-4 mb-3" style={{background:b.bg}}>
+              <div className="font-display font-bold">{b.title} <span className="text-[var(--danger)]">{b.highlight}</span></div>
+              <div className="text-xs text-[var(--muted)] mt-1">{b.subtitle}</div>
+            </div>
+            <div className="flex items-center justify-between">
+              <Badge tone={b.active ? 'green' : 'amber'}>{b.active ? 'Active' : 'Hidden'}</Badge>
+              <div className="flex gap-2">
+                <button onClick={()=>openEdit(b)} className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring"><Icon.Edit/></button>
+                <button onClick={()=>setDeleteConfirm(b)} className="w-9 h-9 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring"><Icon.Close/></button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {banners.length===0 && <div className="text-center text-sm text-[var(--muted)] py-10">No banners yet. Add one to promote a sale or new arrivals.</div>}
+      </div>
+
+      {formOpen && <AdminBannerFormModal banner={editingBanner} onClose={()=>setFormOpen(false)} />}
+      {deleteConfirm && (
+        <Modal onClose={()=>setDeleteConfirm(null)} title="Delete Banner">
+          <p className="text-sm text-[var(--muted)]">Delete this banner? This can't be undone.</p>
+          <div className="flex gap-3 mt-5">
+            <button onClick={()=>setDeleteConfirm(null)} className="flex-1 btn-secondary py-2.5 text-sm focus-ring">Cancel</button>
+            <button onClick={confirmDelete} className="flex-1 py-2.5 text-sm font-bold text-white bg-[var(--danger)] rounded-2xl focus-ring">Delete</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function AdminSettings(){
+  const {storeSettings, setStoreSettings, showToast} = useApp();
+  const [form, setForm] = useState(storeSettings);
+
+  const save = ()=>{
+    setStoreSettings(form);
+    showToast('Store settings saved','✅');
+  };
+
+  const field = (key, label, placeholder)=> (
+    <div>
+      <label className="text-xs font-semibold text-[var(--muted)]">{label}</label>
+      <input value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={placeholder}
+        className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+    </div>
+  );
+
+  return (
+    <div className="fade-in max-w-lg">
+      <div className="card p-5 space-y-3">
+        {field('storeName','Store Name')}
+        {field('addressLine','Address Line')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {field('area','Area')}
+          {field('city','City')}
+        </div>
+        {field('pincode','PIN Code')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {field('phone','Phone')}
+          {field('email','Email')}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {field('hoursWeekday','Weekday Hours')}
+          {field('hoursSunday','Sunday Hours')}
+        </div>
+        <button onClick={save} className="btn-primary w-full py-2.5 mt-2 focus-ring">Save Store Settings</button>
+      </div>
+    </div>
+  );
+}
+
+function AdminRoot({route}){
+  const [adminAuthed, setAdminAuthed] = useLocalState('meraki_admin_authed', false);
+  if(!route.parts[1]){ navigate('#/admin/dashboard'); }
+  if(!adminAuthed) return <AdminLogin onSuccess={()=>setAdminAuthed(true)} />;
+  return <AdminShell route={route} onExit={()=>{ setAdminAuthed(false); navigate('#/home'); }} />;
+}
+
+/* ============================= END ADMIN PANEL ============================= */
+
 function PageRouter({route}){
   const parts = route.parts;
   const top = parts[0] || 'home';
@@ -2397,6 +2975,7 @@ function LoggedOutScreen(){
 
 function AppShell({route, hash}){
   const {loggedIn} = useApp();
+  if(route.parts[0]==='admin') return <AdminRoot route={route} />;
   const isCheckoutOrConfirm = route.parts[0]==='checkout' || route.parts[0]==='order-confirmation';
   if(!loggedIn) return <LoggedOutScreen />;
   return (
