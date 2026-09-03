@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" id="themeColorMeta" />
 <title>Meraki — Stationery & Toys</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Quicksand:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -220,7 +222,10 @@ const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
 const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
 
 const DEFAULT_BANNERS = [
-  {id:'b1', active:true, title:'Everything they need. Delivered with', highlight:'Care & Happiness! 💗', subtitle:'Stationery, Toys, Art & more — all in one place.', ctaLabel:'Shop Now', ctaLink:'#/category/stationery', bg:'linear-gradient(120deg,#EFE6FF,#F6EEFF)'},
+  {id:'b1', active:true, title:'Stationery for every little idea', highlight:'✨', subtitle:'Notebooks, pens, colours & more — all in one place.', ctaLabel:'Shop Stationery', ctaLink:'#/category/stationery', bg:'linear-gradient(120deg,#EFE6FF,#F6EEFF)'},
+  {id:'b2', active:true, title:'Free delivery', highlight:'above ₹299', subtitle:'Fast, careful doorstep delivery across Jaipur.', ctaLabel:'Start Shopping', ctaLink:'#/home', bg:'linear-gradient(120deg,#E7F8EE,#F3FCF6)'},
+  {id:'b3', active:true, title:'New toys just arrived', highlight:'🧸', subtitle:'Fresh arrivals to make playtime brighter.', ctaLabel:'Shop Toys', ctaLink:'#/category/toys', bg:'linear-gradient(120deg,#FFE9EC,#FFF4F5)'},
+  {id:'b4', active:true, title:'Back to School Collection', highlight:'🎒', subtitle:'Everything on your school list, ready to go.', ctaLabel:'Shop Now', ctaLink:'#/category/school-supplies', bg:'linear-gradient(120deg,#FFF4E0,#FFFAF0)'},
 ];
 
 const DEFAULT_STORE_SETTINGS = {
@@ -298,12 +303,15 @@ function AppProvider({children}){
   });
   const [deliveryType, setDeliveryType] = useLocalState('meraki_delivery_type','home');
   const [paymentMethod, setPaymentMethod] = useLocalState('meraki_payment_method','cod');
+  const [upiAppChoice, setUpiAppChoice] = useLocalState('meraki_upi_app_choice', null);
   const [loggedIn, setLoggedIn] = useLocalState('meraki_logged_in', true);
   const [darkMode, setDarkMode] = useLocalState('meraki_dark_mode', false);
   const [toast, setToast] = useState(null);
 
   useEffect(()=>{
     document.documentElement.classList.toggle('dark', darkMode);
+    const meta = document.getElementById('themeColorMeta');
+    if(meta) meta.setAttribute('content', darkMode ? '#151022' : '#ffffff');
   },[darkMode]);
 
   const showToast = useCallback((msg, icon)=>{
@@ -367,12 +375,15 @@ function AppProvider({children}){
   const placeOrder = useCallback(()=>{
     const orderId = 'MERAKI' + Math.floor(20260000 + Math.random()*9999);
     const now = new Date();
+    const needsVerification = paymentMethod==='upi' || paymentMethod==='upiApps';
+    const paymentLabel = paymentMethod==='upiApps' && upiAppChoice ? upiAppChoice.label : PAYMENT_LABELS[paymentMethod] || paymentMethod;
     const order = {
       id: orderId,
       date: now.toISOString(),
       items: cartLines.map(c=> ({id:c.id, name:c.product.name, qty:c.qty, price:c.product.price, emoji:c.product.emoji, bg:c.product.bg})),
       subtotal, deliveryCharge, packagingCharge, total,
-      deliveryType, paymentMethod,
+      deliveryType, paymentMethod, paymentLabel,
+      paymentVerified: !needsVerification,
       address: {...address},
       status: 'Order Confirmed',
       statusSteps: ['Order Confirmed','Preparing Your Order','Out for Delivery','Delivered'],
@@ -380,8 +391,13 @@ function AppProvider({children}){
     };
     setOrders(prev=> [order, ...prev]);
     setCart([]);
+    setUpiAppChoice(null);
     return order;
-  },[cartLines, subtotal, deliveryCharge, packagingCharge, total, deliveryType, paymentMethod, address, setOrders, setCart]);
+  },[cartLines, subtotal, deliveryCharge, packagingCharge, total, deliveryType, paymentMethod, upiAppChoice, address, setOrders, setCart, setUpiAppChoice]);
+
+  const verifyOrderPayment = useCallback((orderId)=>{
+    setOrders(prev=> prev.map(o=> o.id===orderId ? {...o, paymentVerified:true} : o));
+  },[setOrders]);
 
   const updateOrderStatus = useCallback((orderId, newIndex)=>{
     setOrders(prev=> prev.map(o=>{
@@ -415,16 +431,28 @@ function AppProvider({children}){
     setBanners(prev=> prev.filter(b=>b.id!==id));
   },[setBanners]);
 
+  const reorderBanner = useCallback((id, direction)=>{
+    setBanners(prev=>{
+      const idx = prev.findIndex(b=>b.id===id);
+      const swapIdx = idx + direction;
+      if(idx<0 || swapIdx<0 || swapIdx>=prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return next;
+    });
+  },[setBanners]);
+
   const value = {
     cart, cartLines, cartCount, subtotal, mrpTotal, savings, deliveryCharge, packagingCharge, total, amountToFreeDelivery,
     addToCart, setCartQty, removeFromCart,
     wishlist, toggleWishlist, moveWishlistToCart,
-    orders, placeOrder, updateOrderStatus,
+    orders, placeOrder, updateOrderStatus, verifyOrderPayment,
     address, setAddress, deliveryType, setDeliveryType, paymentMethod, setPaymentMethod,
+    upiAppChoice, setUpiAppChoice,
     loggedIn, setLoggedIn, darkMode, setDarkMode,
     showToast, toast, productMap,
     products, setProducts, upsertProduct, deleteProduct,
-    banners, setBanners, upsertBanner, deleteBanner,
+    banners, setBanners, upsertBanner, deleteBanner, reorderBanner,
     storeSettings, setStoreSettings,
     viewMode, setViewMode,
   };
@@ -633,7 +661,7 @@ function ProductCard({product}){
     <div className="card p-2.5 flex flex-col relative group">
       <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
         className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
-        <span key={isWished} className={"pop inline-block "+(isWished ? 'text-[var(--danger)]' : 'text-gray-300')}>{isWished?'♥':'♡'}</span>
+        <span key={isWished} className={"pop inline-block "+(isWished ? 'text-[var(--danger)]' : 'text-gray-300')}><Icon.Heart active={isWished} /></span>
       </button>
       <div className="relative">
         <a href={"#/product/"+product.id} className="block">
@@ -674,13 +702,53 @@ function ProductCard({product}){
   );
 }
 
-function ProductGrid({products, cols}){
+function ProductListRow({product}){
+  const {cart, addToCart, setCartQty, wishlist, toggleWishlist} = useApp();
+  const line = cart.find(c=>c.id===product.id);
+  const isWished = wishlist.includes(product.id);
+  return (
+    <div className="card p-2.5 flex gap-3 items-center">
+      <a href={"#/product/"+product.id} className="flex-shrink-0">
+        <ProductImg product={product} className="w-16 h-16 text-2xl" />
+      </a>
+      <div className="flex-1 min-w-0">
+        <a href={"#/product/"+product.id}>
+          <div className="text-[13px] font-semibold leading-snug line-clamp-2">{product.name}</div>
+        </a>
+        <div className="flex items-baseline gap-1.5 mt-1">
+          <span className="font-bold text-[14px]">{inr(product.price)}</span>
+          <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>
+          <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+        <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)} className="focus-ring">
+          <span key={isWished} className={"pop inline-block "+(isWished?'text-[var(--danger)]':'text-gray-300')}><Icon.Heart active={isWished} /></span>
+        </button>
+        {!line ? (
+          <button onClick={()=>addToCart(product.id,1)} className="btn-primary px-3 py-1.5 text-xs focus-ring">+ Add</button>
+        ) : (
+          <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} small />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProductGrid({products, cols, layout}){
   if(products.length===0){
     return (
       <div className="text-center py-16 text-[var(--muted)]">
         <div className="text-4xl mb-3">🔍</div>
         <div className="font-semibold">No products found</div>
         <div className="text-sm mt-1">Try changing your filters or search term.</div>
+      </div>
+    );
+  }
+  if(layout==='list'){
+    return (
+      <div className="flex flex-col gap-2.5">
+        {products.map(p=> <ProductListRow key={p.id} product={p} />)}
       </div>
     );
   }
@@ -758,31 +826,89 @@ function SearchBar({autoFocus, onSubmitGo}){
 
 function MobileHeader({route}){
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(route.parts[0]==='search');
+  const [query, setQuery] = useState(()=> parseRoute(window.location.hash).query.q || '');
+  const [focused, setFocused] = useState(false);
+  const {products} = useApp();
+
+  useEffect(()=>{
+    if(route.parts[0]==='search'){
+      setSearchOpen(true);
+      setQuery(route.query.q || '');
+    }
+  },[route.parts[0], route.query.q]);
+
+  const liveResults = (focused && query.trim()) ? products.filter(p=>
+    p.name.toLowerCase().includes(query.toLowerCase()) ||
+    p.category.toLowerCase().includes(query.toLowerCase()) ||
+    p.brand.toLowerCase().includes(query.toLowerCase())
+  ).slice(0,5) : [];
+
+  const runSearch = ()=>{
+    if(query.trim()) navigate('#/search?q='+encodeURIComponent(query.trim()));
+    setFocused(false);
+  };
+
+  const closeSearch = ()=>{
+    setSearchOpen(false);
+    setFocused(false);
+    if(route.parts[0]==='search') navigate('#/home');
+  };
+
   return (
-    <div className="mobile-only sticky top-0 z-40 bg-white border-b border-[var(--line)]">
-      <div className="flex items-center gap-3 px-4 py-3">
-        {!searchOpen && (
-          route.parts.length>1 || ['cart','search','wishlist','account','orders','checkout'].includes(route.parts[0]) ? (
-            <button onClick={()=> window.history.length>1 ? window.history.back() : navigate('#/home')} aria-label="Back" className="focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Back /></button>
-          ) : (
-            <button aria-label="Menu" onClick={()=>setMenuOpen(true)} className="focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Menu /></button>
-          )
-        )}
-        <div className={"overflow-hidden transition-all duration-[350ms] ease-[cubic-bezier(.22,.9,.32,1)] "+(searchOpen?'flex-1':'w-0')} style={{maxWidth: searchOpen?'1000px':'0px'}}>
-          {searchOpen && <SearchBar autoFocus onSubmitGo={()=>setSearchOpen(false)} />}
-        </div>
-        {!searchOpen && <LogoBlock />}
-        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-          {!searchOpen ? (
-            <button aria-label="Search" onClick={()=>setSearchOpen(true)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Search /></button>
-          ) : (
-            <button aria-label="Close search" onClick={()=>setSearchOpen(false)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Close /></button>
+    <div className="mobile-only sticky top-0 z-40">
+      <div className="bg-white rounded-b-2xl overflow-hidden shadow-sm border-b border-[var(--line)]">
+        <div className="flex items-center gap-3 px-4 py-3">
+          {!searchOpen && (
+            route.parts.length>1 || ['cart','search','wishlist','account','orders','checkout'].includes(route.parts[0]) ? (
+              <button onClick={()=> window.history.length>1 ? window.history.back() : navigate('#/home')} aria-label="Back" className="focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Back /></button>
+            ) : (
+              <button aria-label="Menu" onClick={()=>setMenuOpen(true)} className="focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Menu /></button>
+            )
           )}
-          {!searchOpen && <CartButton />}
+          <div className={"overflow-hidden transition-all duration-[350ms] ease-[cubic-bezier(.22,.9,.32,1)] "+(searchOpen?'flex-1':'w-0')} style={{maxWidth: searchOpen?'1000px':'0px'}}>
+            {searchOpen && (
+              <form onSubmit={e=>{e.preventDefault(); runSearch();}} className={"flex items-center bg-[#F5F2FB] rounded-full px-3 py-2 gap-2 border-2 transition-colors "+(focused?'border-[var(--purple)] bg-white':'border-transparent')}>
+                <span className="text-[var(--muted)] flex-shrink-0"><Icon.Search /></span>
+                <input autoFocus value={query} onChange={e=>setQuery(e.target.value)}
+                  onFocus={()=>setFocused(true)}
+                  onBlur={()=>setTimeout(()=>setFocused(false), 150)}
+                  placeholder="Search for toys, stationery, art supplies..."
+                  className="bg-transparent outline-none text-sm w-full placeholder-[var(--muted)]" />
+                {query && <button type="button" onClick={()=>setQuery('')} aria-label="Clear" className="text-[var(--muted)] w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/5 flex-shrink-0"><Icon.Close/></button>}
+              </form>
+            )}
+          </div>
+          {!searchOpen && <LogoBlock />}
+          <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+            {!searchOpen ? (
+              <button aria-label="Search" onClick={()=>setSearchOpen(true)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Search /></button>
+            ) : (
+              <button aria-label="Close search" onClick={closeSearch} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Close /></button>
+            )}
+            {!searchOpen && <CartButton />}
+          </div>
         </div>
+        {!searchOpen && <DeliveryStrip />}
       </div>
-      <DeliveryStrip />
+
+      {searchOpen && liveResults.length>0 && (
+        <div className="absolute left-4 right-4 top-full mt-2 bg-white rounded-2xl shadow-xl border border-[var(--line)] overflow-hidden z-50 fade-in">
+          {liveResults.map(p=> (
+            <a key={p.id} href={"#/product/"+p.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--purple-light)] focus-ring">
+              <ProductImg product={p} className="w-9 h-9 text-base flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold line-clamp-1">{p.name}</div>
+                <div className="text-[11px] text-[var(--muted)]">{inr(p.price)}</div>
+              </div>
+            </a>
+          ))}
+          <button onClick={runSearch} className="w-full text-left px-3 py-2.5 text-xs font-bold text-[var(--purple)] hover:bg-[var(--purple-light)] border-t border-[var(--line)] focus-ring">
+            See all results for "{query}" →
+          </button>
+        </div>
+      )}
+
       <MobileMenu open={menuOpen} onClose={()=>setMenuOpen(false)} />
     </div>
   );
@@ -893,33 +1019,104 @@ function MobileFooterCompact(){
   );
 }
 
-function MobileMenu({open, onClose}){
-  const items = [
-    {label:'Home', href:'#/home', icon:'🏠'},
-    ...CATEGORIES.map(c=>({label:c.name, href:'#/category/'+c.id, icon:c.icon})),
-    {label:'Wishlist', href:'#/wishlist', icon:'♡'},
-    {label:'My Orders', href:'#/orders', icon:'📦'},
-    {label:'Account', href:'#/account', icon:'👤'},
-  ];
-  return ReactDOM.createPortal(
-    <div className={"fixed inset-0 z-50 flex "+(open?'':'pointer-events-none')}>
-      <div className={"absolute inset-0 bg-black/40 transition-opacity duration-300 "+(open?'opacity-100':'opacity-0')} onClick={onClose}></div>
-      <div className={"relative bg-white w-72 max-w-[80%] h-full p-5 shadow-2xl overflow-y-auto transition-transform duration-[350ms] ease-[cubic-bezier(.22,.9,.32,1)] "+(open?'translate-x-0':'-translate-x-full')}>
-        <div className="flex items-center justify-between mb-6">
-          <LogoBlock />
-          <button onClick={onClose} aria-label="Close menu" className="focus-ring w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/5"><Icon.Close /></button>
-        </div>
-        <div className="flex flex-col gap-1">
-          {items.map(it=> (
-            <a key={it.label} href={it.href} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--purple-light)] text-sm font-semibold focus-ring">
-              <span className="text-lg">{it.icon}</span>{it.label}
-            </a>
-          ))}
-        </div>
-        <div className="mobile-only"><MobileFooterCompact /></div>
+function AboutModal({onClose}){
+  return (
+    <Modal onClose={onClose} title="About Meraki">
+      <div className="text-sm text-[var(--muted)] leading-relaxed space-y-3">
+        <p>Meraki Stationery &amp; Toys is your friendly neighbourhood store for everything creative — notebooks, art supplies, toys and gifts, picked with care for every age.</p>
+        <p>We believe shopping for the little things should feel simple, joyful and a little bit magical. ✨</p>
+        <p className="text-xs text-[var(--muted)]/70 pt-2 border-t border-[var(--line)]">Meraki (n.) — doing something with soul, creativity, or love. By using this app you agree to our Terms &amp; Privacy Policy, available on request from our support team.</p>
       </div>
-    </div>,
-    document.body
+    </Modal>
+  );
+}
+
+function SidebarSupportFooter(){
+  const {storeSettings:s} = useApp();
+  const mapQuery = encodeURIComponent(s.addressLine+', '+s.area+', '+s.city);
+  const social = [
+    {label:'Instagram', icon:'📷', href:'https://instagram.com/'},
+    {label:'WhatsApp', icon:'💬', href:'https://wa.me/91'+s.phone},
+    {label:'Call', icon:'📞', href:'tel:'+s.phone},
+    {label:'Email', icon:'✉️', href:'mailto:'+s.email},
+    {label:'Location', icon:'📍', href:'https://www.google.com/maps/search/?api=1&query='+mapQuery},
+  ];
+  return (
+    <div className="mt-5 rounded-2xl p-4 text-white" style={{background:'linear-gradient(135deg, var(--purple), var(--purple-dark))'}}>
+      <div className="font-display font-bold text-sm mb-1">{s.storeName}</div>
+      <div className="text-[11px] text-white/70 leading-relaxed">{s.addressLine}, {s.area}, {s.city} — {s.pincode}</div>
+      <div className="flex items-center gap-2 mt-3">
+        {social.map(it=> (
+          <a key={it.label} href={it.href} target={it.href.startsWith('http')?'_blank':undefined} rel="noopener noreferrer" aria-label={it.label}
+            className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25 transition-colors focus-ring">{it.icon}</a>
+        ))}
+      </div>
+      <div className="text-[10px] text-white/50 mt-3">© 2026 {s.storeName}</div>
+    </div>
+  );
+}
+
+function MobileMenu({open, onClose}){
+  const {darkMode, setDarkMode} = useApp();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [storeInfoOpen, setStoreInfoOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  const items = [
+    {label:'Help & Support', icon:'💬', action:()=>setHelpOpen(true)},
+    {label:'Track My Order', icon:'📦', href:'#/orders'},
+    {label:'Store Information', icon:'🏬', action:()=>setStoreInfoOpen(true)},
+    {label:'About Meraki', icon:'✨', action:()=>setAboutOpen(true)},
+  ];
+
+  return (
+    <React.Fragment>
+      {ReactDOM.createPortal(
+        <div className={"fixed inset-0 z-50 flex "+(open?'':'pointer-events-none')}>
+          <div className={"absolute inset-0 bg-black/40 transition-opacity duration-300 "+(open?'opacity-100':'opacity-0')} onClick={onClose}></div>
+          <div className={"relative bg-white w-72 max-w-[80%] h-full p-5 shadow-2xl overflow-y-auto transition-transform duration-[350ms] ease-[cubic-bezier(.22,.9,.32,1)] "+(open?'translate-x-0':'-translate-x-full')}>
+            <div className="flex items-center justify-between mb-5">
+              <LogoBlock />
+              <button onClick={onClose} aria-label="Close menu" className="focus-ring w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/5"><Icon.Close /></button>
+            </div>
+
+            <div className="card p-3.5 flex items-center gap-3 mb-4">
+              <span className="text-[var(--purple)]">{darkMode ? <Icon.Moon/> : <Icon.Sun/>}</span>
+              <div className="flex-1">
+                <div className="text-sm font-semibold">Dark Mode</div>
+                <div className="text-xs text-[var(--muted)]">Easier on the eyes at night</div>
+              </div>
+              <button
+                onClick={()=>setDarkMode(!darkMode)}
+                aria-pressed={darkMode}
+                aria-label="Toggle dark mode"
+                className={"w-11 h-6 rounded-full relative focus-ring flex-shrink-0 "+(darkMode?'bg-[var(--purple)]':'bg-gray-200')}
+              >
+                <span className={"absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 "+(darkMode?'left-[22px]':'left-0.5')}></span>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              {items.map(it=> it.href ? (
+                <a key={it.label} href={it.href} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--purple-light)] text-sm font-semibold focus-ring">
+                  <span className="text-lg">{it.icon}</span>{it.label}
+                </a>
+              ) : (
+                <button key={it.label} onClick={it.action} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--purple-light)] text-sm font-semibold focus-ring text-left w-full">
+                  <span className="text-lg">{it.icon}</span>{it.label}
+                </button>
+              ))}
+            </div>
+
+            <SidebarSupportFooter />
+          </div>
+        </div>,
+        document.body
+      )}
+      {helpOpen && <HelpSupportModal onClose={()=>setHelpOpen(false)} />}
+      {storeInfoOpen && <StoreInfoModal onClose={()=>setStoreInfoOpen(false)} />}
+      {aboutOpen && <AboutModal onClose={()=>setAboutOpen(false)} />}
+    </React.Fragment>
   );
 }
 
@@ -1013,35 +1210,164 @@ function Modal({onClose, title, children}){
 
 /* ============================= HOME PAGE ============================= */
 
+function StoreDetailsModal({onClose}){
+  const {storeSettings:s} = useApp();
+  const fullAddress = s.addressLine+', '+s.area+', '+s.city+' - '+s.pincode;
+  const mapQuery = encodeURIComponent(fullAddress);
+  return (
+    <Modal onClose={onClose} title="Store Details">
+      <div className="space-y-3 text-sm">
+        <div className="card p-3.5">
+          <div className="font-bold flex items-center gap-1.5">🏬 {s.storeName}</div>
+          <div className="text-xs text-[var(--muted)] mt-1">{fullAddress}</div>
+          <div className="text-xs text-[var(--muted)] mt-1">📞 {s.phone}</div>
+        </div>
+        <div className="rounded-xl overflow-hidden border border-[var(--line)] h-48">
+          <iframe title="Store location map" width="100%" height="100%" style={{border:0}} loading="lazy"
+            src={"https://www.google.com/maps?q="+mapQuery+"&output=embed"}></iframe>
+        </div>
+        <div className="flex justify-between text-xs card px-3.5 py-2.5">
+          <span className="font-semibold">Weekdays</span><span className="text-[var(--muted)]">{s.hoursWeekday}</span>
+        </div>
+        <div className="flex justify-between text-xs card px-3.5 py-2.5">
+          <span className="font-semibold">Sunday</span><span className="text-[var(--muted)]">{s.hoursSunday}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <a href={"https://www.google.com/maps/search/?api=1&query="+mapQuery} target="_blank" rel="noopener noreferrer" className="btn-primary py-2.5 text-sm text-center focus-ring">📍 Get Directions</a>
+          <a href={"tel:"+s.phone} className="btn-secondary py-2.5 text-sm text-center focus-ring">📞 Call Store</a>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ProductRow({title, subtitle, products, viewAllHref}){
+  if(!products || products.length===0) return null;
+  return (
+    <div className="px-4 md:container-max md:mx-auto mt-7">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div>
+          <h2 className="font-display font-bold text-lg">{title}</h2>
+          {subtitle && <div className="text-xs text-[var(--muted)]">{subtitle}</div>}
+        </div>
+        {viewAllHref && <a href={viewAllHref} className="text-sm font-semibold text-[var(--purple)] focus-ring flex-shrink-0">View All ›</a>}
+      </div>
+      <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+        {products.map(p=> <div key={p.id} className="snap-item flex-shrink-0 w-[150px]"><ProductCard product={p} /></div>)}
+      </div>
+    </div>
+  );
+}
+
+function BannerCarousel({banners}){
+  const scrollRef = useRef(null);
+  const [active, setActive] = useState(0);
+  const [storeOpen, setStoreOpen] = useState(false);
+
+  const onScroll = ()=>{
+    const el = scrollRef.current;
+    if(!el || el.clientWidth===0) return;
+    setActive(Math.round(el.scrollLeft / el.clientWidth));
+  };
+
+  const goTo = (i)=>{
+    const el = scrollRef.current;
+    if(!el) return;
+    el.scrollTo({left: i*el.clientWidth, behavior:'smooth'});
+  };
+
+  return (
+    <div className="px-4 md:container-max md:mx-auto mt-4 relative group">
+      <div ref={scrollRef} onScroll={onScroll} className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+        {banners.map(banner=> (
+          <div key={banner.id} className="snap-item flex-shrink-0 w-full rounded-2xl overflow-hidden relative bg-cover bg-center"
+            style={{background: banner.image ? `url(${banner.image}) center/cover` : (banner.bg || 'linear-gradient(120deg,#EFE6FF,#F6EEFF)')}}>
+            <div className="p-6 md:p-12 md:flex md:items-center md:justify-between relative z-10">
+              <div className="max-w-md">
+                <h1 className="font-display font-extrabold text-2xl md:text-4xl leading-tight">
+                  {banner.title} <span className="text-[var(--danger)]">{banner.highlight}</span>
+                </h1>
+                <p className="text-sm md:text-base text-[var(--muted)] mt-3">{banner.subtitle}</p>
+                <div className="flex gap-3 mt-5">
+                  <a href={banner.ctaLink || '#/category/stationery'} className="btn-primary px-5 py-2.5 text-sm focus-ring">{banner.ctaLabel || 'Shop Now'}</a>
+                  <button onClick={()=>setStoreOpen(true)} className="btn-secondary px-5 py-2.5 text-sm focus-ring">🏬 Store Pickup</button>
+                </div>
+              </div>
+              <div className="hidden md:flex items-center gap-3 text-7xl mt-6 md:mt-0">
+                <span>🎒</span><span>🧸</span><span>🖍️</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {banners.length>1 && (
+        <React.Fragment>
+          <div className="flex justify-center gap-1.5 mt-3">
+            {banners.map((b,i)=> (
+              <button key={b.id} aria-label={"Go to banner "+(i+1)} onClick={()=>goTo(i)} className={"h-1.5 rounded-full transition-all focus-ring "+(i===active?'w-5 bg-[var(--purple)]':'w-1.5 bg-[var(--line)]')}></button>
+            ))}
+          </div>
+          <button aria-label="Previous banner" onClick={()=>goTo(Math.max(0,active-1))} className="desktop-only absolute left-2 top-[40%] -translate-y-1/2 w-9 h-9 rounded-full bg-white shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity focus-ring">‹</button>
+          <button aria-label="Next banner" onClick={()=>goTo(Math.min(banners.length-1,active+1))} className="desktop-only absolute right-2 top-[40%] -translate-y-1/2 w-9 h-9 rounded-full bg-white shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity focus-ring">›</button>
+        </React.Fragment>
+      )}
+      {storeOpen && <StoreDetailsModal onClose={()=>setStoreOpen(false)} />}
+    </div>
+  );
+}
+
+function ExitIntentGuard(){
+  const [show, setShow] = useState(false);
+
+  useEffect(()=>{
+    window.history.pushState({merakiExitGuard:true}, '');
+    const onPopState = ()=>{
+      setShow(true);
+      window.history.pushState({merakiExitGuard:true}, '');
+    };
+    window.addEventListener('popstate', onPopState);
+    return ()=> window.removeEventListener('popstate', onPopState);
+  },[]);
+
+  const onStay = ()=> setShow(false);
+  const onLeave = ()=>{
+    setShow(false);
+    setTimeout(()=>{ window.history.go(-2); }, 50);
+  };
+
+  if(!show) return null;
+  return (
+    <Modal onClose={onStay} title="Leaving so soon? 🥺">
+      <div className="text-center">
+        <div className="text-4xl mb-2">🧸</div>
+        <p className="text-sm text-[var(--muted)]">We'll miss you! Are you sure you want to leave Meraki?</p>
+        <div className="flex gap-3 mt-5">
+          <button onClick={onStay} className="flex-1 btn-primary py-2.5 text-sm focus-ring">Stay a little longer</button>
+          <button onClick={onLeave} className="flex-1 btn-secondary py-2.5 text-sm focus-ring">Leave</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function HomePage(){
   const {wishlist, toggleWishlist, products, banners} = useApp();
   const popular = products.filter(p=>p.tags.includes('bestseller'));
   const activeBanners = banners.filter(b=>b.active!==false);
+  const shownBanners = activeBanners.length ? activeBanners : DEFAULT_BANNERS;
+
+  const newArrivals = useMemo(()=> [...products].slice(-6).reverse(), [products]);
+  const trending = useMemo(()=> [...products].filter(p=>p.rating>=4.5).sort((a,b)=>b.reviews-a.reviews).slice(0,8), [products]);
+  const stationeryPicks = useMemo(()=> products.filter(p=>p.category==='stationery').slice(0,8), [products]);
+  const toysPicks = useMemo(()=> products.filter(p=>p.category==='toys').slice(0,8), [products]);
+  const schoolEssentials = useMemo(()=> products.filter(p=>p.category==='school-supplies' || p.sub==='Notebooks' || p.sub==='Geometry').slice(0,8), [products]);
+  const recommended = useMemo(()=> [...products].sort(()=>0.5-Math.random()).slice(0,8), [products]);
+  const boughtTogether = useMemo(()=> products.filter(p=>['p1','p4','p6','p11'].includes(p.id)), [products]);
+
   return (
     <div className="fade-in">
-      <div className="px-4 md:container-max md:mx-auto mt-4">
-        <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
-          {(activeBanners.length ? activeBanners : DEFAULT_BANNERS).map(banner=> (
-            <div key={banner.id} className="snap-item flex-shrink-0 w-full rounded-2xl overflow-hidden relative" style={{background: banner.bg || 'linear-gradient(120deg,#EFE6FF,#F6EEFF)'}}>
-              <div className="p-6 md:p-12 md:flex md:items-center md:justify-between relative z-10">
-                <div className="max-w-md">
-                  <h1 className="font-display font-extrabold text-2xl md:text-4xl leading-tight">
-                    {banner.title} <span className="text-[var(--danger)]">{banner.highlight}</span>
-                  </h1>
-                  <p className="text-sm md:text-base text-[var(--muted)] mt-3">{banner.subtitle}</p>
-                  <div className="flex gap-3 mt-5">
-                    <a href={banner.ctaLink || '#/category/stationery'} className="btn-primary px-5 py-2.5 text-sm focus-ring">{banner.ctaLabel || 'Shop Now'}</a>
-                    <a href="#/account" className="btn-secondary px-5 py-2.5 text-sm focus-ring">🏬 Store Pickup</a>
-                  </div>
-                </div>
-                <div className="hidden md:flex items-center gap-3 text-7xl mt-6 md:mt-0">
-                  <span>🎒</span><span>🧸</span><span>🖍️</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <div className="mobile-only"><ExitIntentGuard /></div>
+      <BannerCarousel banners={shownBanners} />
 
       <div className="px-4 md:container-max md:mx-auto mt-6">
         <div className="flex gap-4 overflow-x-auto scrollbar-none pb-1 md:grid md:grid-cols-5 md:gap-4">
@@ -1060,6 +1386,16 @@ function HomePage(){
           <a href="#/category/stationery" className="text-sm font-semibold text-[var(--purple)] focus-ring">View All ›</a>
         </div>
         <ProductGrid products={popular} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
+      </div>
+
+      <div className="mobile-only">
+        <ProductRow title="New Arrivals 🆕" subtitle="Fresh on the shelves" products={newArrivals} />
+        <ProductRow title="Trending Now 📈" subtitle="What everyone's adding to cart" products={trending} />
+        <ProductRow title="Stationery Picks ✏️" products={stationeryPicks} viewAllHref="#/category/stationery" />
+        <ProductRow title="Toys We Love 🧸" products={toysPicks} viewAllHref="#/category/toys" />
+        <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/school-supplies" />
+        <ProductRow title="Frequently Bought Together" subtitle="A handy combo to grab in one go" products={boughtTogether} />
+        <ProductRow title="Recommended For You 💜" products={recommended} />
       </div>
 
       <div className="px-4 md:container-max md:mx-auto mt-8 grid grid-cols-3 gap-2 text-center text-[11px] md:text-sm">
@@ -1125,6 +1461,14 @@ function CategoryPage({route}){
   const [view, setView] = useState('grid');
   const {products} = useApp();
 
+  useEffect(()=>{
+    setSubFilter('all');
+    setPriceMax(1000);
+    setBrandFilter([]);
+    setInStockOnly(false);
+    setSort('popular');
+  },[catId]);
+
   const base = products.filter(p=>p.category===catId);
   const subcats = useMemo(()=> Array.from(new Set(base.map(p=>p.sub))), [catId]);
   const brands = useMemo(()=> Array.from(new Set(base.map(p=>p.brand))), [catId]);
@@ -1159,7 +1503,7 @@ function CategoryPage({route}){
         })}
       </div>
 
-      <div className="flex-1 min-w-0 px-3 md:px-6 py-3 overflow-y-auto h-full">
+      <div key={catId} className="flex-1 min-w-0 px-3 md:px-6 py-3 overflow-y-auto h-full fade-in">
         <div className="hidden md:block mb-2">
           <h1 className="font-display font-bold text-2xl">{cat.icon} {cat.name}</h1>
           <div className="text-sm text-[var(--muted)]">{list.length} products</div>
@@ -1168,7 +1512,7 @@ function CategoryPage({route}){
         <div className="pb-2">
           <div className="flex items-center justify-between mb-2 gap-2">
             <button onClick={()=>setFiltersOpen(true)} className="chip flex items-center gap-1 focus-ring">🧰 Filters</button>
-            <button onClick={()=>setSortOpen(true)} className="chip flex items-center gap-1 focus-ring">Sort: {sortLabels[sort]} ▾</button>
+            <button onClick={()=>setSortOpen(true)} className="chip flex items-center gap-1 focus-ring !px-[13px]">Sort: {sortLabels[sort]} ▾</button>
             <div className="flex gap-1 ml-auto">
               <button onClick={()=>setView('grid')} className={"chip px-2 "+(view==='grid'?'active':'')}>▦</button>
               <button onClick={()=>setView('list')} className={"chip px-2 "+(view==='list'?'active':'')}>≡</button>
@@ -1182,7 +1526,7 @@ function CategoryPage({route}){
             </div>
           )}
         </div>
-        <ProductGrid products={list} cols={view==='grid' ? 'grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'} />
+        <ProductGrid products={list} cols="grid-cols-2 lg:grid-cols-3" layout={view} />
       </div>
 
       {filtersOpen && (
@@ -1236,12 +1580,81 @@ function FilterPanel({subcats, subFilter, setSubFilter, priceMax, setPriceMax, b
 
 /* ============================= PRODUCT DETAILS PAGE ============================= */
 
+function ReviewsModal({product, onClose}){
+  const reviews = [
+    {name:'Ananya S.', rating:5, text:'Great quality, exactly as described. My kid loves it!', days:'3 days ago'},
+    {name:'Rohan K.', rating:4, text:'Good value for money. Delivery was quick too.', days:'1 week ago'},
+    {name:'Priya M.', rating:5, text:'Perfect for school use. Will definitely buy again.', days:'2 weeks ago'},
+  ];
+  return (
+    <Modal onClose={onClose} title="Ratings & Reviews">
+      <div className="flex items-center gap-4 mb-4">
+        <div className="text-3xl font-bold font-display">{product.rating}</div>
+        <div>
+          <StarRating rating={product.rating} />
+          <div className="text-xs text-[var(--muted)] mt-0.5">{product.reviews} ratings</div>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3">
+        {reviews.map((r,i)=> (
+          <div key={i} className="border-t border-[var(--line)] pt-3 first:border-0 first:pt-0">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">{r.name}</span>
+              <span className="text-[11px] text-[var(--muted)]">{r.days}</span>
+            </div>
+            <div className="text-amber-500 text-xs mt-0.5">{'★'.repeat(r.rating)}{'☆'.repeat(5-r.rating)}</div>
+            <p className="text-xs text-[var(--muted)] mt-1">{r.text}</p>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function ShareSheetModal({product, onClose}){
+  const {showToast} = useApp();
+  const url = window.location.href;
+  const text = encodeURIComponent('Check out '+product.name+' on Meraki Stationery & Toys!');
+  const encodedUrl = encodeURIComponent(url);
+  const copy = ()=>{
+    if(navigator.clipboard) navigator.clipboard.writeText(url).then(()=> showToast('Link copied!','🔗')).catch(()=>{});
+  };
+  const nativeShare = ()=>{
+    if(navigator.share) navigator.share({title:product.name, text:'Check out '+product.name+' on Meraki!', url}).catch(()=>{});
+  };
+  const options = [
+    {label:'WhatsApp', icon:'💬', href:'https://wa.me/?text='+text+'%20'+encodedUrl},
+    {label:'Facebook', icon:'📘', href:'https://www.facebook.com/sharer/sharer.php?u='+encodedUrl},
+    {label:'X (Twitter)', icon:'🐦', href:'https://twitter.com/intent/tweet?text='+text+'&url='+encodedUrl},
+    {label:'Instagram', icon:'📷', href:'https://instagram.com/'},
+  ];
+  return (
+    <Modal onClose={onClose} title="Share this product">
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        {options.map(o=> (
+          <a key={o.label} href={o.href} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5 focus-ring">
+            <span className="w-12 h-12 rounded-full bg-[var(--purple-light)] flex items-center justify-center text-xl">{o.icon}</span>
+            <span className="text-[10px] font-semibold text-center">{o.label}</span>
+          </a>
+        ))}
+      </div>
+      {typeof navigator !== 'undefined' && navigator.share && (
+        <button onClick={nativeShare} className="btn-secondary w-full py-2.5 text-sm mb-2 focus-ring">📤 More Share Options</button>
+      )}
+      <button onClick={copy} className="btn-primary w-full py-2.5 text-sm focus-ring">🔗 Copy Link</button>
+      <div className="card p-3 mt-3 text-xs break-all text-[var(--muted)]">{url}</div>
+    </Modal>
+  );
+}
+
 function ProductPage({route}){
   const id = route.parts[1];
-  const {productMap, products, cart, addToCart, wishlist, toggleWishlist, address, showToast} = useApp();
+  const {productMap, products, cart, addToCart, setCartQty, removeFromCart, wishlist, toggleWishlist, address, showToast} = useApp();
   const product = productMap[id];
   const [qty, setQty] = useState(1);
   const [shareOpen, setShareOpen] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
   const [variantIdx, setVariantIdx] = useState(0);
 
   useEffect(()=>{ setQty(1); setVariantIdx(0); }, [id]);
@@ -1251,12 +1664,12 @@ function ProductPage({route}){
   const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
   const related = products.filter(p=> p.category===product.category && p.id!==product.id).slice(0,8);
+  const moreFromBrand = products.filter(p=> p.brand===product.brand && p.id!==product.id).slice(0,8);
   const selectedVariant = product.variants ? product.variants[variantIdx] : null;
 
-  const onAddToCartClick = ()=>{
-    if(line){ navigate('#/cart'); return; }
-    addToCart(product.id, qty);
-    if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒');
+  const onQtyChange = (q)=>{
+    if(q<=0){ removeFromCart(product.id); return; }
+    setCartQty(product.id, q);
   };
 
   return (
@@ -1267,7 +1680,7 @@ function ProductPage({route}){
           <div className="absolute top-3 right-3 flex flex-col gap-2">
             <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
               className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
-              <span key={isWished} className={"pop inline-block "+(isWished?'text-[var(--danger)]':'text-gray-400')}>{isWished?'♥':'♡'}</span>
+              <span key={isWished} className={"pop inline-block "+(isWished?'text-[var(--danger)]':'text-gray-400')}><Icon.Heart active={isWished} /></span>
             </button>
             <button aria-label="Share" onClick={()=>setShareOpen(true)}
               className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform text-[var(--ink)]">
@@ -1277,10 +1690,10 @@ function ProductPage({route}){
         </div>
         <div className="mt-4 md:mt-0">
           <h1 className="font-display font-bold text-xl md:text-2xl">{product.name}</h1>
-          <div className="flex items-center gap-2 mt-1.5">
+          <button onClick={()=>setReviewsOpen(true)} className="flex items-center gap-2 mt-1.5 focus-ring">
             <StarRating rating={product.rating} />
-            <span className="text-xs text-[var(--muted)]">({product.reviews} reviews)</span>
-          </div>
+            <span className="text-xs text-[var(--muted)] underline decoration-dotted">({product.reviews} reviews)</span>
+          </button>
           <div className="flex items-baseline gap-2 mt-3">
             <span className="font-bold text-2xl">{inr(product.price)}</span>
             <span className="text-sm text-gray-400 line-through">{inr(product.mrp)}</span>
@@ -1307,21 +1720,32 @@ function ProductPage({route}){
             </div>
           )}
 
-          <div className="flex items-center gap-4 mt-4">
-            <span className="text-sm font-semibold">Quantity</span>
-            <QuantitySelector qty={qty} onChange={(q)=>setQty(clamp(q,1,20))} />
+          {!line && (
+            <div className="flex items-center gap-4 mt-4 fade-in">
+              <span className="text-sm font-semibold">Quantity</span>
+              <QuantitySelector qty={qty} onChange={(q)=>setQty(clamp(q,1,20))} />
+            </div>
+          )}
+
+          <div key={line?'incart':'initial'} className="flex gap-3 mt-5 items-center fade-in">
+            {line ? (
+              <React.Fragment>
+                <div className="flex-shrink-0"><QuantitySelector qty={line.qty} onChange={onQtyChange} /></div>
+                <a href="#/cart" className="btn-primary flex-1 py-3 text-sm focus-ring text-center">Go to Cart</a>
+                <button onClick={()=>navigate('#/checkout/address')} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
+              </React.Fragment>
+            ) : (
+              <React.Fragment>
+                <button onClick={()=>{ addToCart(product.id, qty); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
+                <button onClick={()=>{ addToCart(product.id, qty); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
+              </React.Fragment>
+            )}
           </div>
 
-          <div className="flex gap-3 mt-5">
-            <button onClick={onAddToCartClick} className="btn-primary flex-1 py-3 text-sm focus-ring">
-              {line ? `Go to Cart (${line.qty})` : '🛒 Add to Cart'}
-            </button>
-            <button onClick={()=>{ addToCart(product.id, qty); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
-          </div>
-
-          <div className="card p-3 mt-4 flex items-center justify-between text-sm">
+          <button onClick={()=>setLocationOpen(true)} className="card p-3 mt-4 flex items-center justify-between text-sm w-full text-left focus-ring">
             <div className="flex items-center gap-2"><span>🚚</span> Delivering to {address.pincode}, {address.area}. Get it today.</div>
-          </div>
+            <span className="text-[var(--purple)] font-bold text-xs flex-shrink-0 ml-2">Change</span>
+          </button>
 
           <div className="mt-5">
             <div className="font-bold text-sm mb-1">Product Description</div>
@@ -1348,12 +1772,22 @@ function ProductPage({route}){
         </div>
       )}
 
-      {shareOpen && (
-        <Modal onClose={()=>setShareOpen(false)} title="Share this product">
-          <div className="text-sm text-[var(--muted)]">Link copied to clipboard (demo):</div>
-          <div className="card p-3 mt-2 text-xs break-all">{window.location.href}</div>
-        </Modal>
+      {moreFromBrand.length>0 && (
+        <div className="mt-8">
+          <div className="font-bold text-lg mb-3 font-display">More from {product.brand}</div>
+          <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+            {moreFromBrand.map(p=> (
+              <div key={p.id} className="snap-item flex-shrink-0 w-[150px]">
+                <ProductCard product={p} />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
+
+      {shareOpen && <ShareSheetModal product={product} onClose={()=>setShareOpen(false)} />}
+      {reviewsOpen && <ReviewsModal product={product} onClose={()=>setReviewsOpen(false)} />}
+      {locationOpen && <ChangeLocationModal onClose={()=>setLocationOpen(false)} />}
     </div>
   );
 }
@@ -1462,10 +1896,15 @@ function CheckoutStepper({step}){
 }
 
 function CheckoutAddressPage(){
-  const {deliveryType, setDeliveryType, address, setAddress, cartLines} = useApp();
+  const {deliveryType, setDeliveryType, address, setAddress, cartLines, storeSettings} = useApp();
   const [form, setForm] = useState(address);
   const [errors, setErrors] = useState({});
   const [saveForFuture, setSaveForFuture] = useState(true);
+  const [addressBookOpen, setAddressBookOpen] = useState(false);
+
+  useEffect(()=>{
+    setForm(address);
+  },[address]);
 
   useEffect(()=>{
     if(cartLines.length===0) navigate('#/cart');
@@ -1512,7 +1951,10 @@ function CheckoutAddressPage(){
 
           {deliveryType==='home' ? (
             <div>
-              <div className="font-bold text-sm mb-2">Delivery Details</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-bold text-sm">Delivery Details</div>
+                <button onClick={()=>setAddressBookOpen(true)} className="text-xs font-bold text-[var(--purple)] focus-ring">📍 Choose Saved Address</button>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2 sm:col-span-1">
                   <label className="text-xs font-semibold text-[var(--muted)]">Full Name</label>
@@ -1555,9 +1997,11 @@ function CheckoutAddressPage(){
             </div>
           ) : (
             <div className="card p-4 text-sm">
-              <div className="font-bold mb-1">Meraki Stationery &amp; Toys</div>
-              <div className="text-[var(--muted)]">Shop No. LG-06, Below HDFC Bank, Kalwar Road, Jaipur — 302012</div>
+              <div className="font-bold mb-1">{storeSettings.storeName}</div>
+              <div className="text-[var(--muted)]">{storeSettings.addressLine}, {storeSettings.area}, {storeSettings.city} — {storeSettings.pincode}</div>
               <div className="text-[var(--muted)] mt-1">🕐 Ready for pickup within 2 hrs of order confirmation.</div>
+              <a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(storeSettings.addressLine+', '+storeSettings.area+', '+storeSettings.city)}
+                target="_blank" rel="noopener noreferrer" className="btn-secondary w-full py-2.5 text-sm text-center mt-3 focus-ring block">📍 Get Directions</a>
             </div>
           )}
         </div>
@@ -1566,20 +2010,83 @@ function CheckoutAddressPage(){
       <div className="px-4 md:container-max md:mx-auto mt-6">
         <button onClick={onContinue} className="btn-primary w-full md:w-auto md:px-10 py-3 text-sm focus-ring">Continue</button>
       </div>
+      {addressBookOpen && <AddressBookModal onClose={()=>setAddressBookOpen(false)} />}
     </div>
   );
 }
 
+const UPI_VPA = '7231842081';
+const UPI_PAYEE_NAME = 'Meraki Stationery and Toys';
+
+function buildUpiUri(amount, note){
+  const params = new URLSearchParams({
+    pa: UPI_VPA, pn: UPI_PAYEE_NAME, am: Number(amount).toFixed(2), cu: 'INR', tn: note || 'Meraki Order Payment'
+  });
+  return 'upi://pay?' + params.toString();
+}
+
+function UpiQr({amount}){
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(!ref.current || typeof QRCode === 'undefined') return;
+    ref.current.innerHTML = '';
+    try{
+      new QRCode(ref.current, {
+        text: buildUpiUri(amount),
+        width: 168, height: 168,
+        colorDark: '#241A38', colorLight: '#ffffff',
+      });
+    }catch(e){ console.error('QR generation failed', e); }
+  },[amount]);
+  return <div ref={ref} className="flex items-center justify-center min-h-[168px] min-w-[168px]"></div>;
+}
+
+function UpiAppSelectorModal({onClose, onSelectApp}){
+  const apps = [
+    {id:'phonepe', label:'PhonePe', icon:'📱', color:'#5F259F'},
+    {id:'gpay', label:'Google Pay', icon:'🔵', color:'#4285F4'},
+    {id:'paytm', label:'Paytm', icon:'💠', color:'#00BAF2'},
+  ];
+  return (
+    <Modal onClose={onClose} title="Choose a UPI App">
+      <div className="flex flex-col gap-2">
+        {apps.map(a=> (
+          <button key={a.id} onClick={()=>onSelectApp(a)} className="card p-3.5 flex items-center gap-3 text-left focus-ring">
+            <span className="w-10 h-10 rounded-full flex items-center justify-center text-lg text-white flex-shrink-0" style={{background:a.color}}>{a.icon}</span>
+            <div className="flex-1 text-sm font-bold">{a.label}</div>
+            <span className="text-[var(--muted)]">›</span>
+          </button>
+        ))}
+      </div>
+      <div className="text-[11px] text-[var(--muted)] mt-3 text-center">You'll be redirected to the app to pay the exact bill amount.</div>
+    </Modal>
+  );
+}
+
 function CheckoutPaymentPage(){
-  const {paymentMethod, setPaymentMethod, cartLines} = useApp();
+  const {paymentMethod, setPaymentMethod, upiAppChoice, setUpiAppChoice, cartLines, total} = useApp();
+  const [upiAppPickerOpen, setUpiAppPickerOpen] = useState(false);
   useEffect(()=>{ if(cartLines.length===0) navigate('#/cart'); },[]);
+
   const options = [
     {id:'cod', label:'Cash on Delivery', sub:'Pay when your order is delivered', icon:'💵'},
-    {id:'upi', label:'UPI / QR Code', sub:'Pay using any UPI app', icon:'📱'},
-    {id:'phonepe', label:'PhonePe / Google Pay', sub:'Pay directly', icon:'🅿️'},
-    {id:'paytm', label:'Paytm', sub:'', icon:'🅿️'},
+    {id:'upi', label:'UPI / QR Code', sub:'Scan & pay with any UPI app', icon:'📱'},
+    {id:'upiApps', label: upiAppChoice ? upiAppChoice.label : 'UPI Apps', sub: upiAppChoice ? 'Tap to change app' : 'PhonePe, Google Pay, Paytm', icon:'🅿️'},
     {id:'card', label:'Card / Net Banking', sub:'Coming Soon', icon:'💳', disabled:true},
   ];
+
+  const onSelect = (id)=>{
+    if(id==='upiApps'){ setUpiAppPickerOpen(true); return; }
+    setPaymentMethod(id);
+  };
+
+  const onSelectUpiApp = (app)=>{
+    setUpiAppChoice(app);
+    setPaymentMethod('upiApps');
+    setUpiAppPickerOpen(false);
+    try{ window.location.href = buildUpiUri(total); }catch(e){}
+  };
+
   return (
     <div className="fade-in pb-8">
       <CheckoutStepper step={2} />
@@ -1589,19 +2096,26 @@ function CheckoutPaymentPage(){
           <div className="flex flex-col gap-2">
             {options.map(o=> (
               <label key={o.id} className={"card p-3 flex items-center gap-3 cursor-pointer "+(o.disabled?'opacity-50 cursor-not-allowed':'')+(paymentMethod===o.id?' border-[var(--purple)] border-2':'')}>
-                <input type="radio" disabled={o.disabled} checked={paymentMethod===o.id} onChange={()=>setPaymentMethod(o.id)} />
+                <input type="radio" disabled={o.disabled} checked={paymentMethod===o.id} onChange={()=>onSelect(o.id)} />
                 <span className="text-xl">{o.icon}</span>
                 <div className="flex-1">
                   <div className="text-sm font-bold">{o.label}</div>
                   {o.sub && <div className="text-[11px] text-[var(--muted)]">{o.sub}</div>}
                 </div>
+                {o.id==='upiApps' && <button type="button" onClick={()=>setUpiAppPickerOpen(true)} className="text-xs font-bold text-[var(--purple)] focus-ring flex-shrink-0">Choose ›</button>}
               </label>
             ))}
           </div>
           {paymentMethod==='upi' && (
             <div className="card p-5 mt-3 flex flex-col items-center">
-              <div className="w-36 h-36 bg-[repeating-linear-gradient(45deg,#e5e0f5,#e5e0f5_6px,#fff_6px,#fff_12px)] rounded-lg flex items-center justify-center text-3xl">▦</div>
-              <div className="text-xs text-[var(--muted)] mt-2">Scan this QR with any UPI app (demo)</div>
+              <UpiQr amount={total} />
+              <div className="text-xs text-[var(--muted)] mt-3 text-center">Scan with any UPI app to pay <b>{inr(total)}</b></div>
+              <div className="text-[11px] text-[var(--muted)] mt-1">Paying to UPI ID: {UPI_VPA}</div>
+            </div>
+          )}
+          {paymentMethod==='upiApps' && upiAppChoice && (
+            <div className="card p-3.5 mt-3 text-xs text-[var(--muted)] flex items-center gap-2">
+              <span>ℹ️</span> You'll be asked to confirm payment of {inr(total)} in {upiAppChoice.label} at the final step.
             </div>
           )}
         </div>
@@ -1610,16 +2124,20 @@ function CheckoutPaymentPage(){
       <div className="px-4 md:container-max md:mx-auto mt-6">
         <button onClick={()=>navigate('#/checkout/confirm')} className="btn-primary w-full md:w-auto md:px-10 py-3 text-sm focus-ring">Continue</button>
       </div>
+      {upiAppPickerOpen && <UpiAppSelectorModal onClose={()=>setUpiAppPickerOpen(false)} onSelectApp={onSelectUpiApp} />}
     </div>
   );
 }
 
-const PAYMENT_LABELS = {cod:'Cash on Delivery', upi:'UPI / QR Code', phonepe:'PhonePe / Google Pay', paytm:'Paytm', card:'Card / Net Banking'};
+const PAYMENT_LABELS = {cod:'Cash on Delivery', upi:'UPI / QR Code', upiApps:'UPI Apps', phonepe:'PhonePe / Google Pay', paytm:'Paytm', card:'Card / Net Banking'};
 
 function CheckoutConfirmPage(){
-  const {cartLines, address, deliveryType, paymentMethod, subtotal, deliveryCharge, packagingCharge, total, placeOrder} = useApp();
+  const {cartLines, address, deliveryType, paymentMethod, upiAppChoice, subtotal, deliveryCharge, packagingCharge, total, placeOrder} = useApp();
   const [placing, setPlacing] = useState(false);
   useEffect(()=>{ if(cartLines.length===0) navigate('#/cart'); },[]);
+
+  const paymentLabel = paymentMethod==='upiApps' && upiAppChoice ? upiAppChoice.label : PAYMENT_LABELS[paymentMethod];
+  const needsVerification = paymentMethod==='upi' || paymentMethod==='upiApps';
 
   const onPlaceOrder = ()=>{
     setPlacing(true);
@@ -1651,10 +2169,17 @@ function CheckoutConfirmPage(){
             </div>
             <div className="border-t border-dashed border-[var(--line)] my-3"></div>
             <div className="flex justify-between text-sm">
-              <div><div className="font-bold">Payment Method</div><div className="text-[var(--muted)]">{PAYMENT_LABELS[paymentMethod]}</div></div>
+              <div><div className="font-bold">Payment Method</div><div className="text-[var(--muted)]">{paymentLabel}</div></div>
               <a href="#/checkout/payment" className="text-xs font-bold text-[var(--purple)] focus-ring">Change</a>
             </div>
           </div>
+
+          {needsVerification && (
+            <div className="card p-3.5 text-xs text-amber-700 bg-amber-50 border-amber-200 flex items-start gap-2">
+              <span>⚠️</span>
+              <span>Your order will be marked <b>Payment Pending</b> until you confirm the payment on the next screen — we never mark an online payment as successful automatically.</span>
+            </div>
+          )}
 
           <div className="card p-4">
             <div className="font-bold text-sm mb-3">Order Items ({cartLines.length})</div>
@@ -1686,20 +2211,63 @@ function CheckoutConfirmPage(){
 
 /* ============================= ORDER CONFIRMATION ============================= */
 
+function MerakiCheckIcon(){
+  return (
+    <svg width="84" height="84" viewBox="0 0 88 88" fill="none" className="mx-auto pop">
+      <circle cx="44" cy="44" r="40" fill="var(--purple-light)"/>
+      <circle cx="44" cy="44" r="29" fill="var(--purple)"/>
+      <path d="M31 45 L40 54 L58 34" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <circle cx="72" cy="18" r="4" fill="var(--amber)"/>
+      <circle cx="12" cy="58" r="3" fill="var(--green)"/>
+      <path d="M70 60 l2 5 l5 2 l-5 2 l-2 5 l-2-5 l-5-2 l5-2 Z" fill="var(--danger)"/>
+    </svg>
+  );
+}
+
+function MerakiPendingIcon(){
+  return (
+    <svg width="84" height="84" viewBox="0 0 88 88" fill="none" className="mx-auto pop">
+      <circle cx="44" cy="44" r="40" fill="#FFF4E0"/>
+      <circle cx="44" cy="44" r="29" fill="var(--amber)"/>
+      <path d="M44 30v14l10 8" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <circle cx="72" cy="18" r="4" fill="var(--purple)"/>
+      <circle cx="12" cy="58" r="3" fill="var(--green)"/>
+    </svg>
+  );
+}
+
 function OrderConfirmationPage({route}){
   const orderId = route.parts[1];
-  const {orders} = useApp();
+  const {orders, products, verifyOrderPayment} = useApp();
   const order = orders.find(o=>o.id===orderId);
   if(!order) return <div className="p-8 text-center text-[var(--muted)]">Order not found. <a className="text-[var(--purple)] font-semibold" href="#/home">Go home</a></div>;
   const orderDate = new Date(order.date);
   const eta = new Date(orderDate.getTime() + 2*60*60*1000);
+  const paymentLabel = order.paymentLabel || PAYMENT_LABELS[order.paymentMethod];
+  const isPending = order.paymentVerified===false;
+  const orderedIds = order.items.map(it=>it.id);
+  const recommendations = products.filter(p=> !orderedIds.includes(p.id) && p.tags.includes('bestseller')).slice(0,8);
+
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-8 max-w-lg md:max-w-2xl mx-auto text-center">
-      <div className="text-6xl mb-2 pop">✅</div>
-      <h1 className="font-display font-bold text-xl">Thank You! 🎉</h1>
-      <div className="text-[var(--muted)] text-sm mt-1">Your order is confirmed</div>
-      <div className="text-[var(--purple)] font-bold text-sm mt-2">Order #{order.id}</div>
-      <div className="text-xs text-[var(--muted)] mt-1">We've received your order and it is being processed.</div>
+      {isPending ? <MerakiPendingIcon /> : <MerakiCheckIcon />}
+      {isPending ? (
+        <React.Fragment>
+          <h1 className="font-display font-bold text-xl mt-3">Almost there! ⏳</h1>
+          <div className="text-[var(--muted)] text-sm mt-1">Waiting for payment confirmation</div>
+          <div className="text-[var(--purple)] font-bold text-sm mt-2">Order #{order.id}</div>
+          <div className="text-xs text-[var(--muted)] mt-1 max-w-sm mx-auto">We haven't received confirmation of your {paymentLabel} payment yet. If you've already paid, let us know below.</div>
+          <button onClick={()=>verifyOrderPayment(order.id)} className="btn-primary px-6 py-3 text-sm mt-5 focus-ring">✅ I've Completed This Payment</button>
+          <div className="text-[11px] text-[var(--muted)] mt-2">This is a self-reported confirmation for this demo — no live payment verification is performed.</div>
+        </React.Fragment>
+      ) : (
+        <React.Fragment>
+          <h1 className="font-display font-bold text-xl mt-3">Thank You! 🎉</h1>
+          <div className="text-[var(--muted)] text-sm mt-1">Your order is confirmed</div>
+          <div className="text-[var(--purple)] font-bold text-sm mt-2">Order #{order.id}</div>
+          <div className="text-xs text-[var(--muted)] mt-1">We've received your order and it is being processed.</div>
+        </React.Fragment>
+      )}
 
       <div className="grid grid-cols-3 gap-2 mt-5 text-left">
         <div className="card p-3"><div className="text-[11px] text-[var(--muted)]">Order Date</div><div className="text-xs font-bold mt-0.5">{orderDate.toLocaleDateString()}, {orderDate.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div></div>
@@ -1716,7 +2284,7 @@ function OrderConfirmationPage({route}){
         ))}
         <div className="border-t border-dashed border-[var(--line)] my-2"></div>
         <div className="flex justify-between text-sm font-bold"><span>Total Amount</span><span>{inr(order.total)}</span></div>
-        <div className="text-xs text-[var(--muted)] mt-1">Payment: {PAYMENT_LABELS[order.paymentMethod]}</div>
+        <div className="text-xs text-[var(--muted)] mt-1 flex items-center gap-1.5">Payment: {paymentLabel} {isPending ? <Badge tone="amber">Pending</Badge> : <Badge tone="green">Confirmed</Badge>}</div>
       </div>
 
       <div className="flex gap-3 mt-6">
@@ -1724,6 +2292,17 @@ function OrderConfirmationPage({route}){
         <a href="#/home" className="btn-secondary flex-1 py-3 text-sm text-center focus-ring">Continue Shopping</a>
       </div>
       <div className="text-xs text-[var(--green)] font-semibold mt-4 bg-[var(--green-light)] rounded-xl p-3">📲 We'll notify you once your order is out for delivery.</div>
+
+      {recommendations.length>0 && (
+        <div className="mt-8 text-left">
+          <div className="font-bold text-lg mb-3 font-display">You might also like</div>
+          <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+            {recommendations.map(p=> (
+              <div key={p.id} className="snap-item flex-shrink-0 w-[150px]"><ProductCard product={p} /></div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1758,7 +2337,7 @@ function downloadInvoice(order, storeSettings){
     y += 8;
     doc.text('Order Date: '+new Date(order.date).toLocaleString(), 14, y);
     y += 5;
-    doc.text('Payment Method: '+(PAYMENT_LABELS[order.paymentMethod]||order.paymentMethod), 14, y);
+    doc.text('Payment Method: '+(order.paymentLabel || PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod), 14, y);
     y += 5;
     doc.text('Delivery Type: '+(order.deliveryType==='home'?'Home Delivery':'Store Pickup'), 14, y);
 
@@ -1864,6 +2443,11 @@ function OrderDetailPage({route}){
         <button onClick={()=>downloadInvoice(order, storeSettings)} className="text-xs font-bold text-[var(--purple)] flex items-center gap-1 focus-ring">⬇️ Invoice</button>
       </div>
       <div className="text-xs text-[var(--muted)] mb-4">Placed on {new Date(order.date).toLocaleString()}</div>
+      {order.paymentVerified===false && (
+        <a href={"#/order-confirmation/"+order.id} className="card p-3 mb-4 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border-amber-200 focus-ring">
+          <span>⏳</span> Payment pending confirmation — tap to complete
+        </a>
+      )}
 
       <div className="card p-4 mb-4">
         <div className="font-bold text-sm mb-4">Order Status</div>
@@ -1939,7 +2523,7 @@ function SearchPage(){
 
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-8">
-      <div className="flex items-center bg-[#F5F2FB] rounded-xl px-3 py-2.5 gap-2 mb-4">
+      <div className="desktop-only flex items-center bg-[#F5F2FB] rounded-xl px-3 py-2.5 gap-2 mb-4">
         <span className="text-[var(--muted)]">🔍</span>
         <input autoFocus value={term} onChange={onType} placeholder="Search for toys, stationery, art supplies..." className="bg-transparent outline-none text-sm w-full" />
       </div>
@@ -2217,7 +2801,7 @@ function SettingsModal({onClose}){
     <React.Fragment>
     <Modal onClose={onClose} title="Settings">
       <div className="space-y-4">
-        <div>
+        <div className="desktop-only">
           <div className="font-bold text-sm mb-2">Appearance</div>
           <div className="card p-3.5 flex items-center gap-3">
             <span className="text-[var(--purple)]">{darkMode ? <Icon.Moon/> : <Icon.Sun/>}</span>
@@ -2244,10 +2828,10 @@ function SettingsModal({onClose}){
           </div>
         </div>
         <div>
-          <div className="font-bold text-sm mb-2">Delivery</div>
+          <div className="font-bold text-sm mb-2">Saved Addresses</div>
           <button onClick={()=>setAddressBookOpen(true)} className="card p-3.5 w-full flex items-center gap-3 text-left focus-ring">
             <span className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0"><Icon.MapPin/></span>
-            <div className="flex-1"><div className="text-sm font-semibold">Manage Addresses</div><div className="text-xs text-[var(--muted)]">Add, edit or switch delivery addresses</div></div>
+            <div className="flex-1"><div className="text-sm font-semibold">Manage Addresses</div><div className="text-xs text-[var(--muted)]">Add, edit, delete or set a default delivery address</div></div>
             <span className="text-[var(--muted)]">›</span>
           </button>
         </div>
@@ -2748,7 +3332,7 @@ function AdminOrderDetailModal({order, onClose}){
           <div className="font-bold mb-1">Customer & Delivery</div>
           <div className="text-xs text-[var(--muted)]">{order.address.name} · +91 {order.address.phone}</div>
           <div className="text-xs text-[var(--muted)]">{order.address.line1}, {order.address.area}, {order.address.city} - {order.address.pincode}</div>
-          <div className="text-xs text-[var(--muted)] mt-1">Payment: {PAYMENT_LABELS[order.paymentMethod]} · {order.deliveryType==='home'?'Home Delivery':'Store Pickup'}</div>
+          <div className="text-xs text-[var(--muted)] mt-1">Payment: {order.paymentLabel || PAYMENT_LABELS[order.paymentMethod]} {order.paymentVerified===false && <Badge tone="amber">Pending</Badge>} · {order.deliveryType==='home'?'Home Delivery':'Store Pickup'}</div>
         </div>
         <div className="card p-3.5">
           <div className="font-bold mb-2">Items</div>
@@ -2798,13 +3382,22 @@ function AdminOrders(){
 }
 
 function emptyBannerForm(){
-  return {id:'', active:true, title:'', highlight:'', subtitle:'', ctaLabel:'Shop Now', ctaLink:'#/category/stationery', bg:'#EFE6FF'};
+  return {id:'', active:true, title:'', highlight:'', subtitle:'', ctaLabel:'Shop Now', ctaLink:'#/category/stationery', bg:'#EFE6FF', image:null};
 }
 
 function AdminBannerFormModal({banner, onClose}){
   const {upsertBanner, showToast} = useApp();
   const [form, setForm] = useState(banner ? {...banner} : emptyBannerForm());
   const isEdit = Boolean(banner);
+
+  const onImageUpload = (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(file.size > 2*1024*1024){ showToast('Please choose an image under 2MB','⚠️'); return; }
+    const reader = new FileReader();
+    reader.onload = ()=> setForm(prev=>({...prev, image: reader.result}));
+    reader.readAsDataURL(file);
+  };
 
   const save = ()=>{
     if(!form.title.trim()){ showToast('Please add a banner title','⚠️'); return; }
@@ -2817,6 +3410,22 @@ function AdminBannerFormModal({banner, onClose}){
   return (
     <Modal onClose={onClose} title={isEdit ? 'Edit Banner' : 'Add Banner'}>
       <div className="space-y-3">
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Banner Image (optional)</label>
+          {form.image ? (
+            <div className="mt-1 relative rounded-lg overflow-hidden border border-[var(--line)]">
+              <img src={form.image} alt="Banner preview" className="w-full h-28 object-cover" />
+              <button type="button" onClick={()=>setForm({...form,image:null})} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring"><Icon.Close/></button>
+            </div>
+          ) : (
+            <label className="mt-1 flex flex-col items-center justify-center gap-1 border-2 border-dashed border-[var(--line)] rounded-lg h-24 cursor-pointer hover:bg-gray-50 focus-ring">
+              <span className="text-lg">🖼️</span>
+              <span className="text-xs font-semibold text-[var(--muted)]">Tap to upload an image</span>
+              <input type="file" accept="image/*" onChange={onImageUpload} className="hidden" />
+            </label>
+          )}
+          <div className="text-[10px] text-[var(--muted)] mt-1">If no image is uploaded, the background colour below is used instead.</div>
+        </div>
         <div><label className="text-xs font-semibold text-[var(--muted)]">Title</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Everything they need. Delivered with" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
         <div><label className="text-xs font-semibold text-[var(--muted)]">Highlight (coloured text)</label><input value={form.highlight} onChange={e=>setForm({...form,highlight:e.target.value})} placeholder="Care & Happiness! 💗" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
         <div><label className="text-xs font-semibold text-[var(--muted)]">Subtitle</label><input value={form.subtitle} onChange={e=>setForm({...form,subtitle:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
@@ -2836,7 +3445,7 @@ function AdminBannerFormModal({banner, onClose}){
 }
 
 function AdminBanners(){
-  const {banners, deleteBanner, showToast} = useApp();
+  const {banners, deleteBanner, reorderBanner, showToast} = useApp();
   const [formOpen, setFormOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -2847,19 +3456,22 @@ function AdminBanners(){
 
   return (
     <div className="fade-in max-w-3xl">
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-between items-center mb-4">
+        <div className="text-xs text-[var(--muted)]">{banners.length} banner{banners.length!==1?'s':''} · order shown here matches the homepage carousel</div>
         <button onClick={openAdd} className="btn-primary px-4 py-2 text-sm focus-ring">+ Add Banner</button>
       </div>
       <div className="flex flex-col gap-3">
-        {banners.map(b=> (
+        {banners.map((b,i)=> (
           <div key={b.id} className="card p-4">
-            <div className="rounded-xl p-4 mb-3" style={{background:b.bg}}>
+            <div className="rounded-xl p-4 mb-3 bg-cover bg-center" style={{background: b.image ? `url(${b.image}) center/cover` : b.bg}}>
               <div className="font-display font-bold">{b.title} <span className="text-[var(--danger)]">{b.highlight}</span></div>
               <div className="text-xs text-[var(--muted)] mt-1">{b.subtitle}</div>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <Badge tone={b.active ? 'green' : 'amber'}>{b.active ? 'Active' : 'Hidden'}</Badge>
               <div className="flex gap-2">
+                <button onClick={()=>reorderBanner(b.id,-1)} disabled={i===0} aria-label="Move up" className="w-9 h-9 rounded-full bg-gray-100 text-[var(--ink)] flex items-center justify-center focus-ring disabled:opacity-30">↑</button>
+                <button onClick={()=>reorderBanner(b.id,1)} disabled={i===banners.length-1} aria-label="Move down" className="w-9 h-9 rounded-full bg-gray-100 text-[var(--ink)] flex items-center justify-center focus-ring disabled:opacity-30">↓</button>
                 <button onClick={()=>openEdit(b)} className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring"><Icon.Edit/></button>
                 <button onClick={()=>setDeleteConfirm(b)} className="w-9 h-9 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring"><Icon.Close/></button>
               </div>
@@ -2975,15 +3587,19 @@ function LoggedOutScreen(){
 
 function AppShell({route, hash}){
   const {loggedIn} = useApp();
+  useEffect(()=>{
+    window.scrollTo({top:0, left:0, behavior:'auto'});
+  },[hash]);
   if(route.parts[0]==='admin') return <AdminRoot route={route} />;
   const isCheckoutOrConfirm = route.parts[0]==='checkout' || route.parts[0]==='order-confirmation';
   if(!loggedIn) return <LoggedOutScreen />;
+  const transitionKey = route.parts[0]==='category' ? 'category' : hash;
   return (
     <div className="min-h-screen flex flex-col">
       <MobileHeader route={route} />
       <DesktopHeader route={route} />
       <div className="flex-1">
-        <div key={hash} className="page-transition">
+        <div key={transitionKey} className="page-transition">
           <PageRouter route={route} />
         </div>
       </div>
