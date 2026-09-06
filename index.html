@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Quicksand:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -166,15 +167,27 @@
 <script type="text/babel" data-presets="react">
 const {useState,useEffect,useMemo,useCallback,useRef,createContext,useContext} = React;
 
+/* ============================= SUPABASE ============================= */
+const SUPABASE_URL = 'https://viefouzekrzoqaqpuaug.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpZWZvdXpla3J6b3FhcXB1YXVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyMTQ4ODIsImV4cCI6MjEwMDc5MDg4Mn0.BNVufdPxOHkxdIuuEZ4ny2KPABW9UR0t6x6v1_0hOBo';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SHOP_OWNER_ID = '536e1ccc-1790-4ae5-bd04-f4e9bf16b80c';
+
 /* ============================= DATA ============================= */
 
 const CATEGORIES = [
   {id:'stationery', name:'Stationery', icon:'✏️', color:'#EFE6FF'},
+  {id:'notebooks-diaries', name:'Notebooks & Diaries', icon:'📓', color:'#DCEBFF'},
   {id:'toys', name:'Toys', icon:'🧸', color:'#FFE9EC'},
-  {id:'art-craft', name:'Art & Craft', icon:'🎨', color:'#E7F8EE'},
-  {id:'school-supplies', name:'School Supplies', icon:'🎒', color:'#FFF4E0'},
-  {id:'gifts', name:'Gifts', icon:'🎁', color:'#E6F3FF'},
+  {id:'art-craft-toys', name:'Art/Craft Toys', icon:'🎨', color:'#E7F8EE'},
 ];
+
+const CATEGORY_DB_TO_SLUG = {
+  'Stationery': 'stationery',
+  'Notebooks & Diaries': 'notebooks-diaries',
+  'Toys': 'toys',
+  'Art/Craft Toys': 'art-craft-toys',
+};
 
 const BRANDS = ['Classmate','Camlin','DOMS','Natraj','Apsara','Flair','Faber-Castell','Funskool','Joyo','Luvely'];
 
@@ -225,7 +238,7 @@ const DEFAULT_BANNERS = [
   {id:'b1', active:true, title:'Stationery for every little idea', highlight:'✨', subtitle:'Notebooks, pens, colours & more — all in one place.', ctaLabel:'Shop Stationery', ctaLink:'#/category/stationery', bg:'linear-gradient(120deg,#EFE6FF,#F6EEFF)'},
   {id:'b2', active:true, title:'Free delivery', highlight:'above ₹299', subtitle:'Fast, careful doorstep delivery across Jaipur.', ctaLabel:'Start Shopping', ctaLink:'#/home', bg:'linear-gradient(120deg,#E7F8EE,#F3FCF6)'},
   {id:'b3', active:true, title:'New toys just arrived', highlight:'🧸', subtitle:'Fresh arrivals to make playtime brighter.', ctaLabel:'Shop Toys', ctaLink:'#/category/toys', bg:'linear-gradient(120deg,#FFE9EC,#FFF4F5)'},
-  {id:'b4', active:true, title:'Back to School Collection', highlight:'🎒', subtitle:'Everything on your school list, ready to go.', ctaLabel:'Shop Now', ctaLink:'#/category/school-supplies', bg:'linear-gradient(120deg,#FFF4E0,#FFFAF0)'},
+  {id:'b4', active:true, title:'Back to School Collection', highlight:'🎒', subtitle:'Everything on your school list, ready to go.', ctaLabel:'Shop Now', ctaLink:'#/category/notebooks-diaries', bg:'linear-gradient(120deg,#FFF4E0,#FFFAF0)'},
 ];
 
 const DEFAULT_STORE_SETTINGS = {
@@ -235,6 +248,35 @@ const DEFAULT_STORE_SETTINGS = {
   phone:'8302416181', email:'hello@merakistore.in',
   hoursWeekday:'10:00 AM – 9:30 PM', hoursSunday:'10:00 AM – 2:00 PM',
 };
+
+// Maps a row from the real `storefront_products` view (your actual POS
+// inventory) into the shape the rest of the UI already expects. Real inventory
+// has no MRP/discount/rating concept, so those are left honest (no discount,
+// no fabricated rating) rather than invented.
+function mapDbProduct(row){
+  const slug = CATEGORY_DB_TO_SLUG[row.category] || row.category.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  const meta = CATEGORIES.find(c=>c.id===slug);
+  return {
+    id: row.id,
+    name: row.name,
+    category: slug,
+    categoryLabel: row.category,
+    sub: row.brand || 'General',
+    brand: row.brand || 'Generic',
+    price: Number(row.price),
+    mrp: Number(row.price),
+    discount: 0,
+    rating: 0,
+    reviews: 0,
+    stock: row.stock,
+    emoji: meta ? meta.icon : '🛍️',
+    bg: meta ? meta.color : '#F1EBFB',
+    image: row.image_url || null,
+    desc: row.description || '',
+    tags: row.is_featured ? ['bestseller'] : [],
+    variants: null,
+  };
+}
 
 const DELIVERY_CHARGE = 30;
 const PACKAGING_CHARGE = 5;
@@ -293,20 +335,99 @@ function AppProvider({children}){
   const [cart, setCart] = useLocalState('meraki_cart', []); // [{id,qty}]
   const [wishlist, setWishlist] = useLocalState('meraki_wishlist', []); // [id]
   const [orders, setOrders] = useLocalState('meraki_orders', []);
-  const [products, setProducts] = useLocalState('meraki_products', DEFAULT_PRODUCTS);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [banners, setBanners] = useLocalState('meraki_banners', DEFAULT_BANNERS);
   const [storeSettings, setStoreSettings] = useLocalState('meraki_store_settings', DEFAULT_STORE_SETTINGS);
   const [viewMode, setViewMode] = useLocalState('meraki_view_mode', 'customer'); // 'customer' | 'admin'
   const [address, setAddress] = useLocalState('meraki_address', {
-    name:'Prashant Punia', phone:'8302416181', email:'prashant@example.com', line1:'Shop No. LG-06, Below HDFC Bank',
-    area:'Kalwar Road', landmark:'Near HDFC Bank', pincode:'302012', city:'Jaipur', instructions:''
+    name:'', phone:'', email:'', line1:'',
+    area:'', landmark:'', pincode:'', city:'Jaipur', instructions:''
   });
   const [deliveryType, setDeliveryType] = useLocalState('meraki_delivery_type','home');
   const [paymentMethod, setPaymentMethod] = useLocalState('meraki_payment_method','cod');
   const [upiAppChoice, setUpiAppChoice] = useLocalState('meraki_upi_app_choice', null);
-  const [loggedIn, setLoggedIn] = useLocalState('meraki_logged_in', true);
   const [darkMode, setDarkMode] = useLocalState('meraki_dark_mode', false);
   const [toast, setToast] = useState(null);
+
+  // ---- Real Supabase Auth ----
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [customerProfile, setCustomerProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  useEffect(()=>{
+    sb.auth.getSession().then(({data})=>{
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    const { data: sub } = sb.auth.onAuthStateChange((_event, sess)=>{
+      setSession(sess);
+    });
+    return ()=> sub.subscription.unsubscribe();
+  },[]);
+
+  const fetchProfile = useCallback((userId)=>{
+    if(!userId){ setCustomerProfile(null); return; }
+    setProfileLoading(true);
+    sb.from('customer_profiles').select('*').eq('id', userId).maybeSingle()
+      .then(({data, error})=>{
+        if(!error) setCustomerProfile(data);
+        setProfileLoading(false);
+      });
+  },[]);
+
+  useEffect(()=>{
+    fetchProfile(session ? session.user.id : null);
+  },[session, fetchProfile]);
+
+  const signUp = useCallback(async ({email, password, fullName, phone, username})=>{
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { full_name: fullName, phone } }
+    });
+    if(error) return { error };
+    // fill in username too (trigger only sets full_name/phone from signup metadata)
+    if(data.user && username){
+      await sb.from('customer_profiles').update({ username }).eq('id', data.user.id);
+    }
+    return { data, needsEmailConfirmation: !data.session };
+  },[]);
+
+  const signIn = useCallback(async ({email, password})=>{
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    return { data, error };
+  },[]);
+
+  const signOut = useCallback(async ()=>{
+    await sb.auth.signOut();
+    setCustomerProfile(null);
+  },[]);
+
+  const updateProfile = useCallback(async (fields)=>{
+    if(!session) return { error: new Error('Not logged in') };
+    const { data, error } = await sb.from('customer_profiles').update(fields).eq('id', session.user.id).select().maybeSingle();
+    if(!error) setCustomerProfile(data);
+    return { data, error };
+  },[session]);
+
+  const loggedIn = Boolean(session);
+
+  // ---- Real product catalog from your POS inventory ----
+  const fetchProducts = useCallback(()=>{
+    setProductsLoading(true);
+    sb.from('storefront_products').select('*').then(({data, error})=>{
+      if(!error && data){
+        setProducts(data.map(mapDbProduct));
+      } else if(error){
+        console.error('Failed to load products from Supabase, using demo fallback', error);
+        setProducts(DEFAULT_PRODUCTS);
+      }
+      setProductsLoading(false);
+    });
+  },[]);
+
+  useEffect(()=>{ fetchProducts(); },[fetchProducts]);
 
   useEffect(()=>{
     document.documentElement.classList.toggle('dark', darkMode);
@@ -449,8 +570,10 @@ function AppProvider({children}){
     orders, placeOrder, updateOrderStatus, verifyOrderPayment,
     address, setAddress, deliveryType, setDeliveryType, paymentMethod, setPaymentMethod,
     upiAppChoice, setUpiAppChoice,
-    loggedIn, setLoggedIn, darkMode, setDarkMode,
-    showToast, toast, productMap,
+    loggedIn, authLoading, session, customerProfile, profileLoading,
+    signUp, signIn, signOut, updateProfile,
+    darkMode, setDarkMode,
+    showToast, toast, productMap, productsLoading,
     products, setProducts, upsertProduct, deleteProduct,
     banners, setBanners, upsertBanner, deleteBanner, reorderBanner,
     storeSettings, setStoreSettings,
@@ -673,6 +796,13 @@ function QuantitySelector({qty, onChange, small}){
 }
 
 function ProductImg({product, className, iconClass}){
+  if(product.image){
+    return (
+      <div className={"placeholder-img overflow-hidden "+className} style={{background:product.bg}}>
+        <img src={product.image} alt={product.name} className="w-full h-full object-cover relative z-[1]" />
+      </div>
+    );
+  }
   return (
     <div className={"placeholder-img "+className} style={{background:product.bg}}>
       <span className={iconClass||''} style={{position:'relative', zIndex:1}}>{product.emoji}</span>
@@ -711,8 +841,8 @@ function ProductCard({product}){
       )}
       <div className="flex items-baseline gap-1.5 mt-1">
         <span className="font-bold text-[15px]">{inr(product.price)}</span>
-        <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>
-        <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>
+        {product.discount>0 && <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>}
+        {product.discount>0 && <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>}
       </div>
       <div className="mt-2 flex gap-1.5 items-center">
         <div className="flex-1">
@@ -749,8 +879,8 @@ function ProductListRow({product}){
         </a>
         <div className="flex items-baseline gap-1.5 mt-1">
           <span className="font-bold text-[14px]">{inr(product.price)}</span>
-          <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>
-          <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>
+          {product.discount>0 && <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>}
+          {product.discount>0 && <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>}
         </div>
       </div>
       <div className="flex flex-col items-end gap-2 flex-shrink-0">
@@ -1383,7 +1513,7 @@ function ExitIntentGuard(){
 }
 
 function HomePage(){
-  const {wishlist, toggleWishlist, products, banners} = useApp();
+  const {wishlist, toggleWishlist, products, productsLoading, banners} = useApp();
   const popular = products.filter(p=>p.tags.includes('bestseller'));
   const activeBanners = banners.filter(b=>b.active!==false);
   const shownBanners = activeBanners.length ? activeBanners : DEFAULT_BANNERS;
@@ -1392,7 +1522,7 @@ function HomePage(){
   const trending = useMemo(()=> [...products].filter(p=>p.rating>=4.5).sort((a,b)=>b.reviews-a.reviews).slice(0,8), [products]);
   const stationeryPicks = useMemo(()=> products.filter(p=>p.category==='stationery').slice(0,8), [products]);
   const toysPicks = useMemo(()=> products.filter(p=>p.category==='toys').slice(0,8), [products]);
-  const schoolEssentials = useMemo(()=> products.filter(p=>p.category==='school-supplies' || p.sub==='Notebooks' || p.sub==='Geometry').slice(0,8), [products]);
+  const schoolEssentials = useMemo(()=> products.filter(p=>p.category==='notebooks-diaries').slice(0,8), [products]);
   const recommended = useMemo(()=> [...products].sort(()=>0.5-Math.random()).slice(0,8), [products]);
   const boughtTogether = useMemo(()=> products.filter(p=>['p1','p4','p6','p11'].includes(p.id)), [products]);
 
@@ -1425,7 +1555,7 @@ function HomePage(){
         <ProductRow title="Trending Now 📈" subtitle="What everyone's adding to cart" products={trending} />
         <ProductRow title="Stationery Picks ✏️" products={stationeryPicks} viewAllHref="#/category/stationery" />
         <ProductRow title="Toys We Love 🧸" products={toysPicks} viewAllHref="#/category/toys" />
-        <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/school-supplies" />
+        <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/notebooks-diaries" />
         <ProductRow title="Frequently Bought Together" subtitle="A handy combo to grab in one go" products={boughtTogether} />
         <ProductRow title="Recommended For You 💜" products={recommended} />
       </div>
@@ -1722,14 +1852,18 @@ function ProductPage({route}){
         </div>
         <div className="mt-4 md:mt-0">
           <h1 className="font-display font-bold text-xl md:text-2xl">{product.name}</h1>
-          <button onClick={()=>setReviewsOpen(true)} className="flex items-center gap-2 mt-1.5 focus-ring">
-            <StarRating rating={product.rating} />
-            <span className="text-xs text-[var(--muted)] underline decoration-dotted">({product.reviews} reviews)</span>
-          </button>
+          {product.rating > 0 ? (
+            <button onClick={()=>setReviewsOpen(true)} className="flex items-center gap-2 mt-1.5 focus-ring">
+              <StarRating rating={product.rating} />
+              <span className="text-xs text-[var(--muted)] underline decoration-dotted">({product.reviews} reviews)</span>
+            </button>
+          ) : (
+            <div className="text-xs text-[var(--muted)] mt-1.5">No reviews yet</div>
+          )}
           <div className="flex items-baseline gap-2 mt-3">
             <span className="font-bold text-2xl">{inr(product.price)}</span>
-            <span className="text-sm text-gray-400 line-through">{inr(product.mrp)}</span>
-            <Badge tone="danger">{product.discount}% OFF</Badge>
+            {product.discount>0 && <span className="text-sm text-gray-400 line-through">{inr(product.mrp)}</span>}
+            {product.discount>0 && <Badge tone="danger">{product.discount}% OFF</Badge>}
           </div>
           <div className="text-xs text-[var(--muted)] mt-1">Inclusive of all taxes</div>
           <div className="flex items-center gap-2 mt-3">
@@ -2054,12 +2188,6 @@ const UPI_PAYEE_NAME = 'Prashant Punia';
 // payment-confirmation screen (with amount prefilled) instead of its home screen.
 // The generic 'upi://pay' scheme below is kept for the QR code, since that
 // needs to stay app-agnostic so any UPI app's scanner can read it.
-const UPI_APP_SCHEMES = {
-  phonepe: 'phonepe://pay',
-  gpay: 'tez://upi/pay',
-  paytm: 'paytmmp://pay',
-};
-
 function buildUpiParams(amount, note){
   return {
     pa: UPI_VPA, pn: UPI_PAYEE_NAME, am: Number(amount).toFixed(2), cu: 'INR',
@@ -2071,9 +2199,15 @@ function buildUpiUri(amount, note){
   return 'upi://pay?' + new URLSearchParams(buildUpiParams(amount, note)).toString();
 }
 
+// NOTE: We deliberately use the single, standard NPCI 'upi://pay' intent for every
+// app choice below (not each app's private/undocumented scheme like tez:// or
+// paytmmp://). Those unofficial schemes are what trigger "blocked for your safety /
+// risk policy" errors in GPay and Paytm, since a webpage silently launching a
+// specific payment app with a pre-filled amount via an undocumented deep link is
+// exactly the pattern phishing pages use. The standard intent lets the phone's OS
+// hand off to the chosen app the same safe way a QR scan does.
 function buildUpiAppUri(appId, amount, note){
-  const base = UPI_APP_SCHEMES[appId] || 'upi://pay';
-  return base + '?' + new URLSearchParams(buildUpiParams(amount, note)).toString();
+  return buildUpiUri(amount, note);
 }
 
 // Brand-coloured payment badges. These use each brand's real primary colour and
@@ -2138,7 +2272,7 @@ function UpiAppSelectorModal({onClose, onSelectApp}){
           </button>
         ))}
       </div>
-      <div className="text-[11px] text-[var(--muted)] mt-3 text-center">You'll be taken straight to the app's payment screen with the amount pre-filled.</div>
+      <div className="text-[11px] text-[var(--muted)] mt-3 text-center">This opens your phone's UPI payment screen with the amount already filled in — just confirm in your chosen app.</div>
     </Modal>
   );
 }
@@ -2946,22 +3080,29 @@ function SettingsModal({onClose}){
 }
 
 function EditProfileModal({onClose}){
-  const {address, setAddress, showToast} = useApp();
-  const [form, setForm] = useState({name:address.name, phone:address.phone, email:address.email||''});
+  const {customerProfile, updateProfile, showToast} = useApp();
+  const [form, setForm] = useState({
+    fullName: (customerProfile && customerProfile.full_name) || '',
+    phone: (customerProfile && customerProfile.phone) || '',
+    username: (customerProfile && customerProfile.username) || '',
+  });
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const validate = ()=>{
     const e = {};
-    if(!form.name.trim()) e.name = 'Name is required';
-    if(!/^\d{10}$/.test(form.phone.trim())) e.phone = 'Enter a valid 10-digit phone number';
-    if(form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email address';
+    if(!form.fullName.trim()) e.fullName = 'Name is required';
+    if(form.phone && !/^\d{10}$/.test(form.phone.trim())) e.phone = 'Enter a valid 10-digit phone number';
     setErrors(e);
     return Object.keys(e).length===0;
   };
 
-  const onSave = ()=>{
+  const onSave = async ()=>{
     if(!validate()) return;
-    setAddress({...address, ...form});
+    setSaving(true);
+    const { error } = await updateProfile({ full_name: form.fullName.trim(), phone: form.phone.trim(), username: form.username.trim() || null });
+    setSaving(false);
+    if(error){ showToast('Could not update profile','⚠️'); return; }
     showToast('Profile updated', '✅');
     onClose();
   };
@@ -2971,8 +3112,12 @@ function EditProfileModal({onClose}){
       <div className="space-y-3">
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Full Name</label>
-          <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
-          {errors.name && <div className="text-xs text-[var(--danger)] mt-1">{errors.name}</div>}
+          <input value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          {errors.fullName && <div className="text-xs text-[var(--danger)] mt-1">{errors.fullName}</div>}
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Username</label>
+          <input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
         </div>
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Phone</label>
@@ -2980,11 +3125,11 @@ function EditProfileModal({onClose}){
           {errors.phone && <div className="text-xs text-[var(--danger)] mt-1">{errors.phone}</div>}
         </div>
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)]">Email (optional)</label>
-          <input value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
-          {errors.email && <div className="text-xs text-[var(--danger)] mt-1">{errors.email}</div>}
+          <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
+          <input value={(customerProfile && customerProfile.email) || ''} disabled className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400" />
+          <div className="text-[10px] text-[var(--muted)] mt-1">Email is tied to your account and can't be changed here.</div>
         </div>
-        <button onClick={onSave} className="btn-primary w-full py-2.5 focus-ring">Save Changes</button>
+        <button onClick={onSave} disabled={saving} className="btn-primary w-full py-2.5 focus-ring">{saving ? 'Saving…' : 'Save Changes'}</button>
       </div>
     </Modal>
   );
@@ -3006,7 +3151,7 @@ function LogoutConfirmModal({onClose, onConfirm}){
 }
 
 function AccountPage(){
-  const {address, orders, wishlist, setLoggedIn, showToast} = useApp();
+  const {address, orders, wishlist, customerProfile, signOut, showToast} = useApp();
   const [editingProfile, setEditingProfile] = useState(false);
   const [editing, setEditing] = useState(false);
   const [storeInfoOpen, setStoreInfoOpen] = useState(false);
@@ -3023,9 +3168,10 @@ function AccountPage(){
     {IconC:Icon.Settings, label:'Settings', sub:'App preferences', action:()=>setSettingsOpen(true)},
   ];
 
-  const confirmLogout = ()=>{
+  const confirmLogout = async ()=>{
     setLoggingOut(false);
-    setLoggedIn(false);
+    await signOut();
+    showToast("You've been logged out",'👋');
   };
 
   return (
@@ -3033,9 +3179,10 @@ function AccountPage(){
       <div className="card p-4 flex items-center gap-4 mb-5">
         <div className="w-14 h-14 rounded-full bg-[var(--purple-light)] flex items-center justify-center text-2xl">👤</div>
         <div className="flex-1">
-          <div className="font-bold">{address.name}</div>
-          <div className="text-xs text-[var(--muted)]">+91 {address.phone}</div>
-          {address.email && <div className="text-xs text-[var(--muted)]">{address.email}</div>}
+          <div className="font-bold">{(customerProfile && customerProfile.full_name) || 'Meraki Shopper'}</div>
+          {customerProfile && customerProfile.username && <div className="text-xs text-[var(--muted)]">@{customerProfile.username}</div>}
+          {customerProfile && customerProfile.phone && <div className="text-xs text-[var(--muted)]">+91 {customerProfile.phone}</div>}
+          {customerProfile && customerProfile.email && <div className="text-xs text-[var(--muted)]">{customerProfile.email}</div>}
         </div>
         <button onClick={()=>setEditingProfile(true)} aria-label="Edit profile" className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring hover:bg-[var(--purple)] hover:text-white"><Icon.Edit /></button>
       </div>
@@ -3653,29 +3800,111 @@ function PageRouter({route}){
 }
 
 function LoggedOutScreen(){
-  const {setLoggedIn} = useApp();
-  const onLogin = ()=>{
-    setLoggedIn(true);
-    navigate('#/home');
+  const { signUp, signIn, showToast } = useApp();
+  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'check-email'
+  const [form, setForm] = useState({ email:'', password:'', fullName:'', phone:'', username:'' });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const update = (k,v)=> setForm(prev=>({...prev,[k]:v}));
+
+  const submit = async (e)=>{
+    e.preventDefault();
+    setError('');
+    if(!form.email.trim() || !form.password){ setError('Email and password are required.'); return; }
+    if(mode==='signup' && form.password.length<6){ setError('Password must be at least 6 characters.'); return; }
+    setSubmitting(true);
+    if(mode==='signin'){
+      const { error: err } = await signIn({ email: form.email.trim(), password: form.password });
+      setSubmitting(false);
+      if(err){ setError(err.message); return; }
+      showToast('Welcome back! 👋','✨');
+    } else {
+      if(!form.fullName.trim()){ setError('Please enter your name.'); setSubmitting(false); return; }
+      const { error: err, needsEmailConfirmation } = await signUp({
+        email: form.email.trim(), password: form.password,
+        fullName: form.fullName.trim(), phone: form.phone.trim(), username: form.username.trim(),
+      });
+      setSubmitting(false);
+      if(err){ setError(err.message); return; }
+      if(needsEmailConfirmation){ setMode('check-email'); return; }
+      showToast('Account created! 🎉','✨');
+    }
   };
+
+  if(mode==='check-email'){
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
+        <LogoBlock />
+        <div className="text-6xl mt-8 mb-2">📬</div>
+        <h1 className="font-display font-bold text-xl mt-2">Almost there!</h1>
+        <p className="text-sm text-[var(--muted)] mt-2 max-w-xs">We've sent a confirmation link to <b>{form.email}</b>. Tap it, then come back and log in.</p>
+        <button onClick={()=>setMode('signin')} className="btn-primary px-8 py-3 text-sm mt-6 focus-ring">Back to Log In</button>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
       <LogoBlock />
-      <div className="text-6xl mt-8 mb-2">👋</div>
-      <h1 className="font-display font-bold text-xl mt-2">You've been logged out</h1>
-      <p className="text-sm text-[var(--muted)] mt-2 max-w-xs">Your cart, wishlist and orders are safe. Log back in anytime to pick up where you left off.</p>
-      <button onClick={onLogin} className="btn-primary px-8 py-3 text-sm mt-6 focus-ring">Log In Again</button>
+      <h1 className="font-display font-bold text-xl mt-4">{mode==='signin' ? 'Welcome back! 👋' : 'Create your account ✨'}</h1>
+      <p className="text-sm text-[var(--muted)] mt-1 max-w-xs">{mode==='signin' ? 'Log in to shop, track orders and manage your wishlist.' : 'Sign up to start shopping at Meraki.'}</p>
+
+      <form onSubmit={submit} className="w-full max-w-xs mt-6 space-y-3 text-left">
+        {mode==='signup' && (
+          <React.Fragment>
+            <div>
+              <label className="text-xs font-semibold text-[var(--muted)]">Full Name</label>
+              <input value={form.fullName} onChange={e=>update('fullName',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-semibold text-[var(--muted)]">Username</label>
+                <input value={form.username} onChange={e=>update('username',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-[var(--muted)]">Phone</label>
+                <input value={form.phone} onChange={e=>update('phone',e.target.value.replace(/\D/g,'').slice(0,10))} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+              </div>
+            </div>
+          </React.Fragment>
+        )}
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
+          <input type="email" value={form.email} onChange={e=>update('email',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Password</label>
+          <input type="password" value={form.password} onChange={e=>update('password',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+        </div>
+        {error && <div className="text-xs text-[var(--danger)] font-semibold">{error}</div>}
+        <button type="submit" disabled={submitting} className="btn-primary w-full py-3 text-sm focus-ring">
+          {submitting ? 'Please wait…' : (mode==='signin' ? 'Log In' : 'Create Account')}
+        </button>
+      </form>
+
+      <button onClick={()=>{ setMode(mode==='signin'?'signup':'signin'); setError(''); }} className="text-sm font-bold text-[var(--purple)] mt-5 focus-ring">
+        {mode==='signin' ? "New here? Create an account" : "Already have an account? Log in"}
+      </button>
     </div>
   );
 }
 
 function AppShell({route, hash}){
-  const {loggedIn} = useApp();
+  const {loggedIn, authLoading} = useApp();
   useEffect(()=>{
     window.scrollTo({top:0, left:0, behavior:'auto'});
   },[hash]);
   if(route.parts[0]==='admin') return <AdminRoot route={route} />;
   const isCheckoutOrConfirm = route.parts[0]==='checkout' || route.parts[0]==='order-confirmation';
+  if(authLoading){
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <LogoBlock />
+        <div className="text-xs text-[var(--muted)] mt-4">Loading…</div>
+      </div>
+    );
+  }
   if(!loggedIn) return <LoggedOutScreen />;
   const transitionKey = route.parts[0]==='category' ? 'category' : hash;
   return (
