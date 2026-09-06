@@ -171,6 +171,9 @@ const {useState,useEffect,useMemo,useCallback,useRef,createContext,useContext} =
 const SUPABASE_URL = 'https://viefouzekrzoqaqpuaug.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpZWZvdXpla3J6b3FhcXB1YXVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyMTQ4ODIsImV4cCI6MjEwMDc5MDg4Mn0.BNVufdPxOHkxdIuuEZ4ny2KPABW9UR0t6x6v1_0hOBo';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sbAdmin = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { storageKey: 'meraki-admin-auth', persistSession: true, autoRefreshToken: true }
+});
 const SHOP_OWNER_ID = '536e1ccc-1790-4ae5-bd04-f4e9bf16b80c';
 
 /* ============================= DATA ============================= */
@@ -897,6 +900,21 @@ function ProductListRow({product}){
   );
 }
 
+function ProductGridSkeleton({count=5, cols}){
+  return (
+    <div className={"grid gap-3 "+(cols||'grid-cols-2 md:grid-cols-3 lg:grid-cols-4')}>
+      {Array.from({length:count}).map((_,i)=>(
+        <div key={i} className="card p-2.5 flex flex-col">
+          <div className="skeleton w-full aspect-square rounded-2xl mb-2"></div>
+          <div className="skeleton h-3.5 w-4/5 rounded mb-1.5"></div>
+          <div className="skeleton h-3.5 w-2/5 rounded mb-2"></div>
+          <div className="skeleton h-8 w-full rounded-xl"></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ProductGrid({products, cols, layout}){
   if(products.length===0){
     return (
@@ -1547,7 +1565,11 @@ function HomePage(){
           <h2 className="font-display font-bold text-lg">Popular Picks 🔥</h2>
           <a href="#/category/stationery" className="text-sm font-semibold text-[var(--purple)] focus-ring">View All ›</a>
         </div>
-        <ProductGrid products={popular} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
+        {productsLoading ? (
+          <ProductGridSkeleton count={5} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
+        ) : (
+          <ProductGrid products={popular} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
+        )}
       </div>
 
       <div className="mobile-only">
@@ -1621,7 +1643,7 @@ function CategoryPage({route}){
   const [inStockOnly, setInStockOnly] = useState(false);
   const [subFilter, setSubFilter] = useState('all');
   const [view, setView] = useState('grid');
-  const {products} = useApp();
+  const {products, productsLoading} = useApp();
 
   useEffect(()=>{
     setSubFilter('all');
@@ -1688,7 +1710,11 @@ function CategoryPage({route}){
             </div>
           )}
         </div>
-        <ProductGrid products={list} cols="grid-cols-2 lg:grid-cols-3" layout={view} />
+        {productsLoading ? (
+          <ProductGridSkeleton count={6} cols="grid-cols-2 lg:grid-cols-3" />
+        ) : (
+          <ProductGrid products={list} cols="grid-cols-2 lg:grid-cols-3" layout={view} />
+        )}
       </div>
 
       {filtersOpen && (
@@ -3239,13 +3265,31 @@ function SaveAddressButton({form, onClose}){
 /* ============================= ADMIN PANEL ============================= */
 
 function AdminLogin({onSuccess}){
+  const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [error, setError] = useState('');
-  const submit = (e)=>{
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e)=>{
     e.preventDefault();
-    if(pass === 'admin123'){ setError(''); onSuccess(); }
-    else setError('Incorrect password. Try "admin123" for this demo.');
+    setError('');
+    setSubmitting(true);
+    const { data, error: err } = await sbAdmin.auth.signInWithPassword({ email: email.trim(), password: pass });
+    if(err){
+      setSubmitting(false);
+      setError(err.message);
+      return;
+    }
+    if(data.user.id !== SHOP_OWNER_ID){
+      await sbAdmin.auth.signOut();
+      setSubmitting(false);
+      setError('This account is not authorized as the Meraki shop owner.');
+      return;
+    }
+    setSubmitting(false);
+    onSuccess();
   };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
       <LogoBlock />
@@ -3253,12 +3297,13 @@ function AdminLogin({onSuccess}){
       <h1 className="font-display font-bold text-xl mt-2">Shop Owner Login</h1>
       <p className="text-sm text-[var(--muted)] mt-2 max-w-xs">Manage products, banners and orders for Meraki Stationery &amp; Toys.</p>
       <form onSubmit={submit} className="w-full max-w-xs mt-6 space-y-3">
-        <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Admin password"
+        <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Shop owner email"
           className="w-full border border-[var(--line)] rounded-lg px-3 py-2.5 text-sm text-center focus-ring" autoFocus />
+        <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Password"
+          className="w-full border border-[var(--line)] rounded-lg px-3 py-2.5 text-sm text-center focus-ring" />
         {error && <div className="text-xs text-[var(--danger)] font-semibold">{error}</div>}
-        <button type="submit" className="btn-primary w-full py-3 text-sm focus-ring">Log In to Admin</button>
+        <button type="submit" disabled={submitting} className="btn-primary w-full py-3 text-sm focus-ring">{submitting ? 'Checking…' : 'Log In to Admin'}</button>
       </form>
-      <div className="text-[11px] text-[var(--muted)] mt-4 bg-[var(--purple-light)] rounded-xl px-3 py-2 max-w-xs">Demo password: <b>admin123</b></div>
       <a href="#/home" onClick={()=>navigate('#/home')} className="text-sm font-bold text-[var(--purple)] mt-6 focus-ring">← Back to Store</a>
     </div>
   );
@@ -3352,10 +3397,21 @@ function StatCard({label, value, icon, tone}){
 }
 
 function AdminDashboard(){
-  const {orders, products} = useApp();
+  const {orders} = useApp();
+  const [items, setItems] = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
+
+  useEffect(()=>{
+    sbAdmin.from('items').select('*').eq('owner_id', SHOP_OWNER_ID).then(({data, error})=>{
+      if(!error) setItems(data || []);
+      setItemsLoading(false);
+    });
+  },[]);
+
   const totalRevenue = orders.reduce((s,o)=> s+o.total, 0);
   const pendingOrders = orders.filter(o=> o.status!=='Delivered' && o.status!=='Cancelled').length;
-  const lowStock = products.filter(p=> p.stock <= 20);
+  const onlineVisibleCount = items.filter(i=>i.online_visible).length;
+  const lowStock = items.filter(i=> i.qty <= (i.custom_low!=null ? i.custom_low : 3));
   const recent = orders.slice(0,6);
 
   return (
@@ -3364,15 +3420,15 @@ function AdminDashboard(){
         <StatCard label="Total Orders" value={orders.length} icon="📦" tone="purple" />
         <StatCard label="Total Revenue" value={inr(totalRevenue)} icon="💰" tone="green" />
         <StatCard label="Pending Orders" value={pendingOrders} icon="⏳" tone="amber" />
-        <StatCard label="Products Listed" value={products.length} icon="🏷️" tone="purple" />
+        <StatCard label="Online Products" value={itemsLoading ? '…' : onlineVisibleCount+' / '+items.length} icon="🏷️" tone="purple" />
       </div>
 
-      {lowStock.length>0 && (
+      {!itemsLoading && lowStock.length>0 && (
         <div className="card p-4 mt-4 border-amber-200">
           <div className="font-bold text-sm mb-2 flex items-center gap-2">⚠️ Low Stock Alert</div>
           <div className="flex flex-wrap gap-2">
             {lowStock.slice(0,8).map(p=> (
-              <a key={p.id} href="#/admin/products" className="chip bg-amber-50 border-amber-200 focus-ring">{p.name} · {p.stock} left</a>
+              <a key={p.id} href="#/admin/products" className="chip bg-amber-50 border-amber-200 focus-ring">{p.name} · {p.qty} left</a>
             ))}
           </div>
         </div>
@@ -3406,138 +3462,152 @@ function AdminDashboard(){
   );
 }
 
-function emptyProductForm(){
-  return {id:'', name:'', category:'stationery', sub:'', brand:'', price:'', mrp:'', stock:'', emoji:'📦', bg:'#F1EBFB', desc:'', tags:[], variants:null};
-}
+function AdminProductFormModal({item, onSaved, onClose}){
+  const { showToast } = useApp();
+  const [form, setForm] = useState({
+    price: String(item.price),
+    qty: String(item.qty),
+    online_description: item.online_description || '',
+    online_visible: item.online_visible,
+    is_featured: item.is_featured,
+  });
+  const [saving, setSaving] = useState(false);
 
-function AdminProductFormModal({product, onClose}){
-  const {upsertProduct, showToast} = useApp();
-  const [form, setForm] = useState(product ? {...product, price:String(product.price), mrp:String(product.mrp), stock:String(product.stock)} : emptyProductForm());
-  const isEdit = Boolean(product);
-
-  const save = ()=>{
-    if(!form.name.trim() || !form.sub.trim() || !form.brand.trim() || !form.price || !form.mrp){
-      showToast('Please fill in all required fields','⚠️');
-      return;
-    }
-    const price = Number(form.price), mrp = Number(form.mrp);
-    const discount = mrp>0 ? Math.round(((mrp-price)/mrp)*100) : 0;
-    const finalProduct = {
-      ...form,
-      id: form.id || ('p'+uid()),
-      price, mrp, discount,
-      stock: Number(form.stock)||0,
-      rating: form.rating || 4.5,
-      reviews: form.reviews || 0,
-      tags: form.isBestseller ? ['bestseller'] : (form.tags||[]),
-    };
-    delete finalProduct.isBestseller;
-    upsertProduct(finalProduct);
-    showToast(isEdit ? 'Product updated' : 'Product added', '✅');
+  const save = async ()=>{
+    const price = Number(form.price), qty = Number(form.qty);
+    if(!form.price || isNaN(price) || price<0){ showToast('Enter a valid price','⚠️'); return; }
+    if(form.qty==='' || isNaN(qty) || qty<0){ showToast('Enter a valid stock quantity','⚠️'); return; }
+    setSaving(true);
+    const { data, error } = await sbAdmin.from('items').update({
+      price, qty,
+      online_description: form.online_description.trim() || null,
+      online_visible: form.online_visible,
+      is_featured: form.is_featured,
+    }).eq('id', item.id).select().maybeSingle();
+    setSaving(false);
+    if(error){ showToast('Could not save changes','⚠️'); return; }
+    showToast('Item updated', '✅');
+    onSaved(data);
     onClose();
   };
 
   return (
-    <Modal onClose={onClose} title={isEdit ? 'Edit Product' : 'Add Product'}>
+    <Modal onClose={onClose} title="Edit Inventory Item">
       <div className="space-y-3">
-        <div><label className="text-xs font-semibold text-[var(--muted)]">Product Name</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-semibold text-[var(--muted)]">Category</label>
-            <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
-              {CATEGORIES.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div><label className="text-xs font-semibold text-[var(--muted)]">Sub-category</label><input value={form.sub} onChange={e=>setForm({...form,sub:e.target.value})} placeholder="e.g. Notebooks" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs font-semibold text-[var(--muted)]">Brand</label><input value={form.brand} onChange={e=>setForm({...form,brand:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
-          <div><label className="text-xs font-semibold text-[var(--muted)]">Stock Quantity</label><input type="number" value={form.stock} onChange={e=>setForm({...form,stock:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        <div className="card p-3 text-sm">
+          <div className="font-bold">{item.name}</div>
+          <div className="text-xs text-[var(--muted)] mt-0.5">{item.category} · {item.brand || 'No brand'}</div>
+          <div className="text-[10px] text-[var(--muted)] mt-1">Name, category and brand are managed in your POS app.</div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="text-xs font-semibold text-[var(--muted)]">Selling Price (₹)</label><input type="number" value={form.price} onChange={e=>setForm({...form,price:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
-          <div><label className="text-xs font-semibold text-[var(--muted)]">MRP (₹)</label><input type="number" value={form.mrp} onChange={e=>setForm({...form,mrp:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Stock Quantity</label><input type="number" value={form.qty} onChange={e=>setForm({...form,qty:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs font-semibold text-[var(--muted)]">Emoji Icon</label><input value={form.emoji} onChange={e=>setForm({...form,emoji:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring text-center text-lg" /></div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--muted)]">Card Colour</label>
-            <input type="color" value={form.bg} onChange={e=>setForm({...form,bg:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg h-[38px] px-1 focus-ring" />
-          </div>
+        <div className="text-[10px] text-[var(--muted)] -mt-1">Shared with your POS — changes here affect both channels.</div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Storefront Description</label>
+          <textarea value={form.online_description} onChange={e=>setForm({...form,online_description:e.target.value})} rows="2" placeholder="Shown to online shoppers" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></textarea>
         </div>
-        <div><label className="text-xs font-semibold text-[var(--muted)]">Description</label><textarea value={form.desc} onChange={e=>setForm({...form,desc:e.target.value})} rows="2" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></textarea></div>
-        <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.tags && form.tags.includes('bestseller')} onChange={e=>setForm({...form, isBestseller:e.target.checked, tags:e.target.checked?['bestseller']:[]})} /> Mark as Bestseller</label>
-        <button onClick={save} className="btn-primary w-full py-2.5 focus-ring">{isEdit ? 'Save Changes' : 'Add Product'}</button>
+        <label className="flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={form.online_visible} onChange={e=>setForm({...form,online_visible:e.target.checked})} /> Visible on the online store
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={form.is_featured} onChange={e=>setForm({...form,is_featured:e.target.checked})} /> Feature in Popular Picks
+        </label>
+        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 focus-ring">{saving ? 'Saving…' : 'Save Changes'}</button>
       </div>
     </Modal>
   );
 }
 
 function AdminProducts(){
-  const {products, deleteProduct, showToast} = useApp();
+  const { showToast } = useApp();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [visFilter, setVisFilter] = useState('all');
+  const [editingItem, setEditingItem] = useState(null);
 
-  const filtered = products.filter(p=>
-    (catFilter==='all' || p.category===catFilter) &&
-    (search.trim()==='' || p.name.toLowerCase().includes(search.toLowerCase()) || p.brand.toLowerCase().includes(search.toLowerCase()))
+  const loadItems = ()=>{
+    setLoading(true);
+    sbAdmin.from('items').select('*').eq('owner_id', SHOP_OWNER_ID).order('name').then(({data, error})=>{
+      if(!error) setItems(data || []);
+      else showToast('Could not load inventory','⚠️');
+      setLoading(false);
+    });
+  };
+
+  useEffect(()=>{ loadItems(); },[]);
+
+  const categories = useMemo(()=> Array.from(new Set(items.map(i=>i.category))).sort(), [items]);
+
+  const filtered = items.filter(i=>
+    (catFilter==='all' || i.category===catFilter) &&
+    (visFilter==='all' || (visFilter==='visible' ? i.online_visible : !i.online_visible)) &&
+    (search.trim()==='' || i.name.toLowerCase().includes(search.toLowerCase()) || (i.brand||'').toLowerCase().includes(search.toLowerCase()))
   );
 
-  const openAdd = ()=>{ setEditingProduct(null); setFormOpen(true); };
-  const openEdit = (p)=>{ setEditingProduct(p); setFormOpen(true); };
-  const confirmDelete = ()=>{ deleteProduct(deleteConfirm.id); showToast('Product deleted','🗑️'); setDeleteConfirm(null); };
+  const toggleVisible = async (item)=>{
+    const { data, error } = await sbAdmin.from('items').update({ online_visible: !item.online_visible }).eq('id', item.id).select().maybeSingle();
+    if(error){ showToast('Could not update visibility','⚠️'); return; }
+    setItems(prev=> prev.map(i=> i.id===item.id ? data : i));
+    showToast(data.online_visible ? 'Now visible online' : 'Hidden from storefront', data.online_visible ? '👁️' : '🙈');
+  };
+
+  const onSaved = (updated)=>{
+    setItems(prev=> prev.map(i=> i.id===updated.id ? updated : i));
+  };
 
   return (
     <div className="fade-in max-w-5xl">
+      <div className="card p-3 mb-4 text-xs text-[var(--muted)] flex items-start gap-2">
+        <span>ℹ️</span> This is your real POS inventory ({items.length} items). Adding or removing items happens in your POS app — here you control what's sold online, its online price/stock, and its storefront description.
+      </div>
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search products..." className="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring flex-1 min-w-[160px]" />
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search inventory..." className="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring flex-1 min-w-[160px]" />
         <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} className="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
           <option value="all">All Categories</option>
-          {CATEGORIES.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}
+          {categories.map(c=> <option key={c} value={c}>{c}</option>)}
         </select>
-        <button onClick={openAdd} className="btn-primary px-4 py-2 text-sm focus-ring">+ Add Product</button>
+        <select value={visFilter} onChange={e=>setVisFilter(e.target.value)} className="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+          <option value="all">All Items</option>
+          <option value="visible">Online Only</option>
+          <option value="hidden">Hidden Only</option>
+        </select>
       </div>
 
-      <div className="text-xs text-[var(--muted)] mb-2">{filtered.length} products</div>
-      <div className="flex flex-col gap-2">
-        {filtered.map(p=> (
-          <div key={p.id} className="card p-3 flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <ProductImg product={p} className="w-12 h-12 text-xl flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold line-clamp-1">{p.name}</div>
-                <div className="text-xs text-[var(--muted)]">{p.brand} · {p.sub}</div>
-                <div className="text-xs mt-0.5 sm:hidden">
-                  <span className="font-bold">{inr(p.price)}</span> · <span className={p.stock<=20?'text-[var(--danger)] font-semibold':'text-[var(--muted)]'}>{p.stock} in stock</span>
+      {loading ? (
+        <div className="text-center text-sm text-[var(--muted)] py-10">Loading inventory…</div>
+      ) : (
+        <React.Fragment>
+          <div className="text-xs text-[var(--muted)] mb-2">{filtered.length} items</div>
+          <div className="flex flex-col gap-2">
+            {filtered.map(item=> (
+              <div key={item.id} className="card p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="text-sm font-semibold">{item.name}</div>
+                    {item.is_featured && <Badge tone="amber">Featured</Badge>}
+                    <Badge tone={item.online_visible ? 'green' : 'amber'}>{item.online_visible ? 'Online' : 'Hidden'}</Badge>
+                  </div>
+                  <div className="text-xs text-[var(--muted)] mt-0.5">{item.category} · {item.brand || 'No brand'}</div>
+                  <div className="text-xs mt-0.5">
+                    <span className="font-bold">{inr(item.price)}</span> · <span className={item.qty<=2?'text-[var(--danger)] font-semibold':'text-[var(--muted)]'}>{item.qty} in stock</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 sm:ml-auto flex-shrink-0">
+                  <button onClick={()=>toggleVisible(item)} className="btn-secondary px-3 py-1.5 text-xs focus-ring">{item.online_visible ? 'Hide' : 'Show Online'}</button>
+                  <button onClick={()=>setEditingItem(item)} aria-label="Edit item" className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring flex-shrink-0"><Icon.Edit/></button>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 sm:ml-auto flex-shrink-0">
-              <div className="text-right hidden sm:block">
-                <div className="text-sm font-bold">{inr(p.price)}</div>
-                <div className={"text-xs font-semibold "+(p.stock<=20 ? 'text-[var(--danger)]' : 'text-[var(--muted)]')}>{p.stock} in stock</div>
-              </div>
-              <button onClick={()=>openEdit(p)} aria-label="Edit product" className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring flex-shrink-0"><Icon.Edit/></button>
-              <button onClick={()=>setDeleteConfirm(p)} aria-label="Delete product" className="w-9 h-9 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring flex-shrink-0"><Icon.Close/></button>
-            </div>
+            ))}
+            {filtered.length===0 && <div className="text-center text-sm text-[var(--muted)] py-10">No items match your search.</div>}
           </div>
-        ))}
-        {filtered.length===0 && <div className="text-center text-sm text-[var(--muted)] py-10">No products match your search.</div>}
-      </div>
-
-      {formOpen && <AdminProductFormModal product={editingProduct} onClose={()=>setFormOpen(false)} />}
-      {deleteConfirm && (
-        <Modal onClose={()=>setDeleteConfirm(null)} title="Delete Product">
-          <p className="text-sm text-[var(--muted)]">Delete <b>{deleteConfirm.name}</b>? This can't be undone.</p>
-          <div className="flex gap-3 mt-5">
-            <button onClick={()=>setDeleteConfirm(null)} className="flex-1 btn-secondary py-2.5 text-sm focus-ring">Cancel</button>
-            <button onClick={confirmDelete} className="flex-1 py-2.5 text-sm font-bold text-white bg-[var(--danger)] rounded-2xl focus-ring">Delete</button>
-          </div>
-        </Modal>
+        </React.Fragment>
       )}
+
+      {editingItem && <AdminProductFormModal item={editingItem} onSaved={onSaved} onClose={()=>setEditingItem(null)} />}
     </div>
   );
 }
@@ -3768,10 +3838,26 @@ function AdminSettings(){
 }
 
 function AdminRoot({route}){
-  const [adminAuthed, setAdminAuthed] = useLocalState('meraki_admin_authed', false);
+  const [adminSession, setAdminSession] = useState(undefined); // undefined = checking, null = signed out
   if(!route.parts[1]){ navigate('#/admin/dashboard'); }
-  if(!adminAuthed) return <AdminLogin onSuccess={()=>setAdminAuthed(true)} />;
-  return <AdminShell route={route} onExit={()=>{ setAdminAuthed(false); navigate('#/home'); }} />;
+
+  useEffect(()=>{
+    sbAdmin.auth.getSession().then(({data})=> setAdminSession(data.session));
+    const { data: sub } = sbAdmin.auth.onAuthStateChange((_event, sess)=> setAdminSession(sess));
+    return ()=> sub.subscription.unsubscribe();
+  },[]);
+
+  if(adminSession===undefined){
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <LogoBlock />
+        <div className="text-xs text-[var(--muted)] mt-4">Loading…</div>
+      </div>
+    );
+  }
+  const isOwner = adminSession && adminSession.user.id === SHOP_OWNER_ID;
+  if(!isOwner) return <AdminLogin onSuccess={()=>{}} />;
+  return <AdminShell route={route} onExit={async ()=>{ await sbAdmin.auth.signOut(); navigate('#/home'); }} />;
 }
 
 /* ============================= END ADMIN PANEL ============================= */
