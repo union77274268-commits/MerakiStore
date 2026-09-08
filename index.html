@@ -322,6 +322,35 @@ function mapDbOrder(row, productMap){
   };
 }
 
+function mapDbBanner(row){
+  return {
+    id: row.id,
+    title: row.title,
+    highlight: row.highlight,
+    subtitle: row.subtitle,
+    ctaLabel: row.cta_label,
+    ctaLink: row.cta_link,
+    bg: row.bg,
+    image: row.image_url,
+    active: row.active,
+    sortOrder: row.sort_order,
+  };
+}
+
+function mapDbStoreSettings(row){
+  return {
+    storeName: row.store_name,
+    addressLine: row.address_line,
+    area: row.area,
+    city: row.city,
+    pincode: row.pincode,
+    phone: row.phone,
+    email: row.email,
+    hoursWeekday: row.hours_weekday,
+    hoursSunday: row.hours_sunday,
+  };
+}
+
 const DELIVERY_CHARGE = 30;
 const PACKAGING_CHARGE = 5;
 const FREE_DELIVERY_THRESHOLD = 299;
@@ -376,14 +405,14 @@ const AppContext = createContext(null);
 const useApp = () => useContext(AppContext);
 
 function AppProvider({children}){
-  const [cart, setCart] = useLocalState('meraki_cart', []); // [{id,qty}]
-  const [wishlist, setWishlist] = useLocalState('meraki_wishlist', []); // [id]
+  const [cart, setCart] = useState([]); // [{id,qty}]
+  const [wishlist, setWishlist] = useState([]); // [id]
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [banners, setBanners] = useLocalState('meraki_banners', DEFAULT_BANNERS);
-  const [storeSettings, setStoreSettings] = useLocalState('meraki_store_settings', DEFAULT_STORE_SETTINGS);
+  const [banners, setBanners] = useState(DEFAULT_BANNERS);
+  const [storeSettings, setStoreSettings] = useState(DEFAULT_STORE_SETTINGS);
   const [viewMode, setViewMode] = useLocalState('meraki_view_mode', 'customer'); // 'customer' | 'admin'
   const [address, setAddress] = useLocalState('meraki_address', {
     name:'', phone:'', email:'', line1:'',
@@ -475,6 +504,15 @@ function AppProvider({children}){
   useEffect(()=>{ fetchProducts(); },[fetchProducts]);
 
   useEffect(()=>{
+    sb.from('storefront_banners').select('*').eq('active', true).order('sort_order').then(({data, error})=>{
+      if(!error && data && data.length){ setBanners(data.map(mapDbBanner)); }
+    });
+    sb.from('storefront_settings').select('*').eq('owner_id', SHOP_OWNER_ID).maybeSingle().then(({data, error})=>{
+      if(!error && data){ setStoreSettings(mapDbStoreSettings(data)); }
+    });
+  },[]);
+
+  useEffect(()=>{
     document.documentElement.classList.toggle('dark', darkMode);
     const meta = document.getElementById('themeColorMeta');
     if(meta) meta.setAttribute('content', darkMode ? '#151022' : '#ffffff');
@@ -507,40 +545,90 @@ function AppProvider({children}){
 
   useEffect(()=>{ fetchOrders(); },[fetchOrders]);
 
+  useEffect(()=>{
+    if(!session){ setCart([]); setWishlist([]); return; }
+    sb.from('customer_cart_items').select('product_id, quantity').eq('customer_id', session.user.id)
+      .then(({data, error})=>{
+        if(!error && data) setCart(data.map(r=> ({id:r.product_id, qty:r.quantity})));
+      });
+    sb.from('customer_wishlist').select('product_id').eq('customer_id', session.user.id)
+      .then(({data, error})=>{
+        if(!error && data) setWishlist(data.map(r=> r.product_id));
+      });
+  },[session]);
+
   const addToCart = useCallback((id, qty=1)=>{
+    let finalQty = qty;
     setCart(prev=>{
       const existing = prev.find(c=>c.id===id);
+      finalQty = existing ? clamp(existing.qty+qty,1,20) : clamp(qty,1,20);
       if(existing){
-        return prev.map(c=> c.id===id ? {...c, qty: clamp(c.qty+qty,1,20)} : c);
+        return prev.map(c=> c.id===id ? {...c, qty: finalQty} : c);
       }
-      return [...prev, {id, qty}];
+      return [...prev, {id, qty: finalQty}];
     });
     showToast('Added to cart', '🛒');
-  },[setCart, showToast]);
+    if(session){
+      sb.from('customer_cart_items').upsert(
+        { customer_id: session.user.id, product_id: id, quantity: finalQty },
+        { onConflict: 'customer_id,product_id' }
+      ).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    }
+  },[session, showToast]);
 
   const setCartQty = useCallback((id, qty)=>{
+    const clamped = clamp(qty,0,20);
     setCart(prev=>{
-      if(qty<=0) return prev.filter(c=>c.id!==id);
-      return prev.map(c=> c.id===id ? {...c, qty: clamp(qty,1,20)} : c);
+      if(clamped<=0) return prev.filter(c=>c.id!==id);
+      return prev.map(c=> c.id===id ? {...c, qty: clamped} : c);
     });
-  },[setCart]);
+    if(!session) return;
+    if(clamped<=0){
+      sb.from('customer_cart_items').delete().eq('customer_id', session.user.id).eq('product_id', id)
+        .then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    } else {
+      sb.from('customer_cart_items').upsert(
+        { customer_id: session.user.id, product_id: id, quantity: clamped },
+        { onConflict: 'customer_id,product_id' }
+      ).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    }
+  },[session]);
 
   const removeFromCart = useCallback((id)=>{
     setCart(prev=> prev.filter(c=>c.id!==id));
     showToast('Removed from cart','🗑️');
-  },[setCart, showToast]);
+    if(session){
+      sb.from('customer_cart_items').delete().eq('customer_id', session.user.id).eq('product_id', id)
+        .then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    }
+  },[session, showToast]);
 
   const toggleWishlist = useCallback((id)=>{
+    let adding = false;
     setWishlist(prev=>{
-      if(prev.includes(id)){ showToast('Removed from wishlist','💔'); return prev.filter(x=>x!==id); }
-      showToast('Added to wishlist','💜'); return [...prev, id];
+      if(prev.includes(id)){ showToast('Removed from wishlist','💔'); adding=false; return prev.filter(x=>x!==id); }
+      showToast('Added to wishlist','💜'); adding=true; return [...prev, id];
     });
-  },[setWishlist, showToast]);
+    if(!session) return;
+    if(adding){
+      sb.from('customer_wishlist').upsert(
+        { customer_id: session.user.id, product_id: id },
+        { onConflict: 'customer_id,product_id' }
+      ).then(({error})=>{ if(error) console.error('Wishlist sync failed', error); });
+    } else {
+      sb.from('customer_wishlist').delete().eq('customer_id', session.user.id).eq('product_id', id)
+        .then(({error})=>{ if(error) console.error('Wishlist sync failed', error); });
+    }
+  },[session, showToast]);
 
   const moveWishlistToCart = useCallback((id)=>{
     addToCart(id,1);
     setWishlist(prev=> prev.filter(x=>x!==id));
-  },[addToCart, setWishlist]);
+    if(session){
+      sb.from('customer_wishlist').delete().eq('customer_id', session.user.id).eq('product_id', id)
+        .then(({error})=>{ if(error) console.error('Wishlist sync failed', error); });
+    }
+  },[addToCart, session]);
 
   const cartLines = useMemo(()=> cart
     .map(c=> ({...c, product: productMap[c.id]}))
@@ -597,6 +685,8 @@ function AppProvider({children}){
     setCart([]);
     setUpiAppChoice(null);
     fetchOrders();
+    sb.from('customer_cart_items').delete().eq('customer_id', session.user.id)
+      .then(({error})=>{ if(error) console.error('Failed to clear cart after order', error); });
     return { order: fullOrder };
   },[session, cartLines, subtotal, deliveryCharge, packagingCharge, total, deliveryType, paymentMethod, upiAppChoice, address, productMap, setCart, setUpiAppChoice, fetchOrders, showToast]);
 
@@ -606,41 +696,6 @@ function AppProvider({children}){
     const { error: e2 } = await sb.from('online_payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('order_id', orderId);
     if(e1 || e2){ showToast('Could not update payment status','⚠️'); }
   },[showToast]);
-
-  const upsertProduct = useCallback((product)=>{
-    setProducts(prev=>{
-      const exists = prev.some(p=>p.id===product.id);
-      if(exists) return prev.map(p=> p.id===product.id ? product : p);
-      return [product, ...prev];
-    });
-  },[setProducts]);
-
-  const deleteProduct = useCallback((id)=>{
-    setProducts(prev=> prev.filter(p=>p.id!==id));
-  },[setProducts]);
-
-  const upsertBanner = useCallback((banner)=>{
-    setBanners(prev=>{
-      const exists = prev.some(b=>b.id===banner.id);
-      if(exists) return prev.map(b=> b.id===banner.id ? banner : b);
-      return [...prev, banner];
-    });
-  },[setBanners]);
-
-  const deleteBanner = useCallback((id)=>{
-    setBanners(prev=> prev.filter(b=>b.id!==id));
-  },[setBanners]);
-
-  const reorderBanner = useCallback((id, direction)=>{
-    setBanners(prev=>{
-      const idx = prev.findIndex(b=>b.id===id);
-      const swapIdx = idx + direction;
-      if(idx<0 || swapIdx<0 || swapIdx>=prev.length) return prev;
-      const next = [...prev];
-      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-      return next;
-    });
-  },[setBanners]);
 
   const value = {
     cart, cartLines, cartCount, subtotal, mrpTotal, savings, deliveryCharge, packagingCharge, total, amountToFreeDelivery,
@@ -653,9 +708,8 @@ function AppProvider({children}){
     signUp, signIn, signOut, updateProfile,
     darkMode, setDarkMode,
     showToast, toast, productMap, productsLoading,
-    products, setProducts, upsertProduct, deleteProduct,
-    banners, setBanners, upsertBanner, deleteBanner, reorderBanner,
-    storeSettings, setStoreSettings,
+    products,
+    banners, storeSettings,
     viewMode, setViewMode,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -3028,35 +3082,66 @@ function ToggleRow({label, sub, value, onChange}){
 }
 
 function AddressBookModal({onClose}){
-  const {address, setAddress, showToast} = useApp();
-  const [addresses, setAddresses] = useLocalState('meraki_addresses', [
-    {id:'addr1', label:'Home', name:address.name, phone:address.phone, line1:address.line1, area:address.area, landmark:address.landmark, pincode:address.pincode, city:address.city}
-  ]);
+  const {address, setAddress, session, showToast} = useApp();
+  const [addresses, setAddresses] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({label:'', name:'', phone:'', line1:'', area:'', landmark:'', pincode:'', city:'Jaipur'});
+  const [saving, setSaving] = useState(false);
 
-  const startNew = ()=>{ setForm({label:'', name:'', phone:'', line1:'', area:'', landmark:'', pincode:'', city:'Jaipur'}); setEditing('new'); };
-  const startEdit = (a)=>{ setForm(a); setEditing(a.id); };
+  const loadAddresses = ()=>{
+    if(!session){ setLoading(false); return; }
+    setLoading(true);
+    sb.from('customer_addresses').select('*').eq('customer_id', session.user.id).order('is_default',{ascending:false}).order('created_at')
+      .then(({data, error})=>{
+        if(!error) setAddresses(data || []);
+        setLoading(false);
+      });
+  };
 
-  const save = ()=>{
+  useEffect(()=>{ loadAddresses(); },[session]);
+
+  const startNew = ()=>{ setForm({label:'', name:address.name||'', phone:address.phone||'', line1:'', area:'', landmark:'', pincode:'', city:'Jaipur'}); setEditing('new'); };
+  const startEdit = (a)=>{ setForm({label:a.label||'', name:a.name||'', phone:a.phone||'', line1:a.address_line||'', area:a.locality||'', landmark:a.landmark||'', pincode:a.pincode||'', city:a.city||'Jaipur'}); setEditing(a.id); };
+
+  const save = async ()=>{
     if(!form.name.trim() || !form.line1.trim() || !/^\d{6}$/.test(form.pincode||'')){
       showToast('Please fill name, address & a valid PIN','⚠️');
       return;
     }
-    if(editing==='new'){
-      setAddresses(prev=> [...prev, {...form, id:'addr'+Date.now()}]);
-    } else {
-      setAddresses(prev=> prev.map(a=> a.id===editing ? {...form, id:editing} : a));
-    }
+    setSaving(true);
+    const payload = {
+      label: form.label || 'Home', name: form.name.trim(), phone: form.phone.trim(),
+      address_line: form.line1.trim(), locality: form.area.trim(), landmark: form.landmark.trim() || null,
+      pincode: form.pincode.trim(), city: form.city.trim() || 'Jaipur',
+    };
+    const query = editing==='new'
+      ? sb.from('customer_addresses').insert({...payload, customer_id: session.user.id, is_default: addresses.length===0}).select().maybeSingle()
+      : sb.from('customer_addresses').update(payload).eq('id', editing).select().maybeSingle();
+    const { data, error } = await query;
+    setSaving(false);
+    if(error){ showToast('Could not save address','⚠️'); return; }
+    setAddresses(prev=> editing==='new' ? [...prev, data] : prev.map(a=> a.id===editing ? data : a));
+    if(data.is_default) applyAsDeliveryAddress(data);
     setEditing(null);
   };
 
-  const remove = (id)=>{
+  const remove = async (id)=>{
+    const { error } = await sb.from('customer_addresses').delete().eq('id', id);
+    if(error){ showToast('Could not delete address','⚠️'); return; }
     setAddresses(prev=> prev.filter(a=>a.id!==id));
   };
 
-  const setDefault = (a)=>{
-    setAddress(prev=>({...prev, name:a.name, phone:a.phone, line1:a.line1, area:a.area, landmark:a.landmark, pincode:a.pincode, city:a.city}));
+  const applyAsDeliveryAddress = (a)=>{
+    setAddress(prev=>({...prev, name:a.name, phone:a.phone, line1:a.address_line, area:a.locality, landmark:a.landmark||'', pincode:a.pincode, city:a.city}));
+  };
+
+  const setDefault = async (a)=>{
+    await sb.from('customer_addresses').update({ is_default: false }).eq('customer_id', session.user.id);
+    const { data, error } = await sb.from('customer_addresses').update({ is_default: true }).eq('id', a.id).select().maybeSingle();
+    if(error){ showToast('Could not set default address','⚠️'); return; }
+    setAddresses(prev=> prev.map(x=> ({...x, is_default: x.id===a.id})));
+    applyAsDeliveryAddress(data);
     showToast('Default delivery address updated','📍');
   };
 
@@ -3069,8 +3154,9 @@ function AddressBookModal({onClose}){
           <div><label className="text-xs font-semibold text-[var(--muted)]">Phone</label><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value.replace(/\D/g,'').slice(0,10)})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
           <div><label className="text-xs font-semibold text-[var(--muted)]">House / Flat / Street</label><input value={form.line1} onChange={e=>setForm({...form,line1:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
           <div><label className="text-xs font-semibold text-[var(--muted)]">Area</label><input value={form.area} onChange={e=>setForm({...form,area:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Landmark (optional)</label><input value={form.landmark} onChange={e=>setForm({...form,landmark:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
           <div><label className="text-xs font-semibold text-[var(--muted)]">PIN Code</label><input value={form.pincode} onChange={e=>setForm({...form,pincode:e.target.value.replace(/\D/g,'').slice(0,6)})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
-          <button onClick={save} className="btn-primary w-full py-2.5 focus-ring">Save Address</button>
+          <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 focus-ring">{saving ? 'Saving…' : 'Save Address'}</button>
         </div>
       </Modal>
     );
@@ -3078,29 +3164,31 @@ function AddressBookModal({onClose}){
 
   return (
     <Modal onClose={onClose} title="Saved Addresses">
-      <div className="flex flex-col gap-2.5">
-        {addresses.map(a=>{
-          const isDefault = a.line1===address.line1 && a.pincode===address.pincode;
-          return (
-            <div key={a.id} className={"card p-3.5 "+(isDefault?'border-[var(--purple)] border-2':'')}>
+      {loading ? (
+        <div className="text-center text-sm text-[var(--muted)] py-8">Loading addresses…</div>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {addresses.map(a=> (
+            <div key={a.id} className={"card p-3.5 "+(a.is_default?'border-[var(--purple)] border-2':'')}>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold">{a.label || 'Address'}</span>
-                {isDefault && <Badge tone="green">Default</Badge>}
+                {a.is_default && <Badge tone="green">Default</Badge>}
               </div>
               <div className="text-xs text-[var(--muted)] mt-1">{a.name} · +91 {a.phone}</div>
-              <div className="text-xs text-[var(--muted)]">{a.line1}, {a.area}, {a.city} - {a.pincode}</div>
+              <div className="text-xs text-[var(--muted)]">{a.address_line}, {a.locality}, {a.city} - {a.pincode}</div>
               <div className="flex gap-2 mt-3">
-                <button onClick={()=>setDefault(a)} disabled={isDefault} className="btn-secondary px-3 py-1.5 text-xs flex-1 focus-ring disabled:opacity-40">
-                  {isDefault ? 'Currently Default' : 'Use for Delivery'}
+                <button onClick={()=>setDefault(a)} disabled={a.is_default} className="btn-secondary px-3 py-1.5 text-xs flex-1 focus-ring disabled:opacity-40">
+                  {a.is_default ? 'Currently Default' : 'Use for Delivery'}
                 </button>
                 <button onClick={()=>startEdit(a)} aria-label="Edit address" className="w-8 h-8 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring"><Icon.Edit/></button>
                 <button onClick={()=>remove(a.id)} aria-label="Delete address" className="w-8 h-8 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring"><Icon.Close/></button>
               </div>
             </div>
-          );
-        })}
-        <button onClick={startNew} className="btn-primary w-full py-2.5 mt-1 focus-ring">+ Add New Address</button>
-      </div>
+          ))}
+          {addresses.length===0 && <div className="text-center text-sm text-[var(--muted)] py-4">No saved addresses yet.</div>}
+          <button onClick={startNew} className="btn-primary w-full py-2.5 mt-1 focus-ring">+ Add New Address</button>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -3111,11 +3199,15 @@ function SettingsModal({onClose}){
   const [notifEmail, setNotifEmail] = useLocalState('meraki_settings_email', false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [addressBookOpen, setAddressBookOpen] = useState(false);
-  const {showToast, darkMode, setDarkMode} = useApp();
+  const {showToast, darkMode, setDarkMode, session} = useApp();
 
-  const resetAllData = ()=>{
-    ['meraki_cart','meraki_wishlist','meraki_orders','meraki_address','meraki_delivery_type','meraki_payment_method'].forEach(k=> localStorage.removeItem(k));
-    showToast('All app data cleared','🧹');
+  const resetAllData = async ()=>{
+    ['meraki_address','meraki_delivery_type','meraki_payment_method','meraki_upi_app_choice'].forEach(k=> localStorage.removeItem(k));
+    if(session){
+      await sb.from('customer_cart_items').delete().eq('customer_id', session.user.id);
+      await sb.from('customer_wishlist').delete().eq('customer_id', session.user.id);
+    }
+    showToast('Cart, wishlist & local preferences cleared','🧹');
     setConfirmReset(false);
     setTimeout(()=>{ onClose(); window.location.hash = '#/home'; window.location.reload(); }, 400);
   };
@@ -3166,10 +3258,10 @@ function SettingsModal({onClose}){
         <div>
           <div className="font-bold text-sm mb-2 text-[var(--danger)]">Danger Zone</div>
           {!confirmReset ? (
-            <button onClick={()=>setConfirmReset(true)} className="w-full py-2.5 text-sm font-bold text-[var(--danger)] border border-[var(--danger)] rounded-2xl focus-ring">Clear Cart, Wishlist &amp; Orders</button>
+            <button onClick={()=>setConfirmReset(true)} className="w-full py-2.5 text-sm font-bold text-[var(--danger)] border border-[var(--danger)] rounded-2xl focus-ring">Clear Cart &amp; Wishlist</button>
           ) : (
             <div className="card p-3.5 border-[var(--danger)]">
-              <div className="text-xs mb-2">This will erase your cart, wishlist, orders and saved address on this device. This can't be undone.</div>
+              <div className="text-xs mb-2">This will empty your cart and wishlist, and reset saved delivery preferences on this device. Your order history is kept. This can't be undone.</div>
               <div className="flex gap-2">
                 <button onClick={()=>setConfirmReset(false)} className="flex-1 btn-secondary py-2 text-xs focus-ring">Cancel</button>
                 <button onClick={resetAllData} className="flex-1 py-2 text-xs font-bold text-white bg-[var(--danger)] rounded-2xl focus-ring">Yes, Clear It</button>
@@ -3798,28 +3890,50 @@ function AdminOrders(){
 }
 
 function emptyBannerForm(){
-  return {id:'', active:true, title:'', highlight:'', subtitle:'', ctaLabel:'Shop Now', ctaLink:'#/category/stationery', bg:'#EFE6FF', image:null};
+  return {id:'', active:true, title:'', highlight:'', subtitle:'', cta_label:'Shop Now', cta_link:'#/category/stationery', bg:'#EFE6FF', image_url:null, sort_order:0};
 }
 
-function AdminBannerFormModal({banner, onClose}){
-  const {upsertBanner, showToast} = useApp();
-  const [form, setForm] = useState(banner ? {...banner} : emptyBannerForm());
+function AdminBannerFormModal({banner, sortOrder, onSaved, onClose}){
+  const { showToast } = useApp();
+  const [form, setForm] = useState(banner ? {
+    id: banner.id, active: banner.active, title: banner.title, highlight: banner.highlight||'', subtitle: banner.subtitle||'',
+    cta_label: banner.ctaLabel||'Shop Now', cta_link: banner.ctaLink||'#/category/stationery',
+    bg: banner.bg && banner.bg.startsWith('#') ? banner.bg : '#EFE6FF', image_url: banner.image||null, sort_order: banner.sortOrder||0,
+  } : {...emptyBannerForm(), sort_order: sortOrder||0});
   const isEdit = Boolean(banner);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const onImageUpload = (e)=>{
+  const onImageUpload = async (e)=>{
     const file = e.target.files && e.target.files[0];
     if(!file) return;
     if(file.size > 2*1024*1024){ showToast('Please choose an image under 2MB','⚠️'); return; }
-    const reader = new FileReader();
-    reader.onload = ()=> setForm(prev=>({...prev, image: reader.result}));
-    reader.readAsDataURL(file);
+    setUploading(true);
+    const path = Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9.\-_]/g,'');
+    const { error } = await sbAdmin.storage.from('banner-images').upload(path, file, { upsert:true });
+    if(error){ setUploading(false); showToast('Upload failed','⚠️'); return; }
+    const { data } = sbAdmin.storage.from('banner-images').getPublicUrl(path);
+    setForm(prev=>({...prev, image_url: data.publicUrl}));
+    setUploading(false);
   };
 
-  const save = ()=>{
+  const save = async ()=>{
     if(!form.title.trim()){ showToast('Please add a banner title','⚠️'); return; }
-    const finalBanner = {...form, id: form.id || ('b'+uid()), bg: form.bg.startsWith('linear') ? form.bg : `linear-gradient(120deg, ${form.bg}, #ffffff)`};
-    upsertBanner(finalBanner);
+    setSaving(true);
+    const payload = {
+      title: form.title.trim(), highlight: form.highlight, subtitle: form.subtitle,
+      cta_label: form.cta_label, cta_link: form.cta_link,
+      bg: `linear-gradient(120deg, ${form.bg}, #ffffff)`,
+      image_url: form.image_url, active: form.active, sort_order: form.sort_order,
+    };
+    const query = isEdit
+      ? sbAdmin.from('storefront_banners').update(payload).eq('id', form.id).select().maybeSingle()
+      : sbAdmin.from('storefront_banners').insert(payload).select().maybeSingle();
+    const { data, error } = await query;
+    setSaving(false);
+    if(error){ showToast('Could not save banner','⚠️'); return; }
     showToast(isEdit ? 'Banner updated' : 'Banner added', '✅');
+    onSaved(mapDbBanner(data));
     onClose();
   };
 
@@ -3828,16 +3942,16 @@ function AdminBannerFormModal({banner, onClose}){
       <div className="space-y-3">
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Banner Image (optional)</label>
-          {form.image ? (
+          {form.image_url ? (
             <div className="mt-1 relative rounded-lg overflow-hidden border border-[var(--line)]">
-              <img src={form.image} alt="Banner preview" className="w-full h-28 object-cover" />
-              <button type="button" onClick={()=>setForm({...form,image:null})} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring"><Icon.Close/></button>
+              <img src={form.image_url} alt="Banner preview" className="w-full h-28 object-cover" />
+              <button type="button" onClick={()=>setForm({...form,image_url:null})} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring"><Icon.Close/></button>
             </div>
           ) : (
             <label className="mt-1 flex flex-col items-center justify-center gap-1 border-2 border-dashed border-[var(--line)] rounded-lg h-24 cursor-pointer hover:bg-gray-50 focus-ring">
-              <span className="text-lg">🖼️</span>
-              <span className="text-xs font-semibold text-[var(--muted)]">Tap to upload an image</span>
-              <input type="file" accept="image/*" onChange={onImageUpload} className="hidden" />
+              <span className="text-lg">{uploading ? '⏳' : '🖼️'}</span>
+              <span className="text-xs font-semibold text-[var(--muted)]">{uploading ? 'Uploading…' : 'Tap to upload an image'}</span>
+              <input type="file" accept="image/*" onChange={onImageUpload} disabled={uploading} className="hidden" />
             </label>
           )}
           <div className="text-[10px] text-[var(--muted)] mt-1">If no image is uploaded, the background colour below is used instead.</div>
@@ -3846,29 +3960,67 @@ function AdminBannerFormModal({banner, onClose}){
         <div><label className="text-xs font-semibold text-[var(--muted)]">Highlight (coloured text)</label><input value={form.highlight} onChange={e=>setForm({...form,highlight:e.target.value})} placeholder="Care & Happiness! 💗" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
         <div><label className="text-xs font-semibold text-[var(--muted)]">Subtitle</label><input value={form.subtitle} onChange={e=>setForm({...form,subtitle:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs font-semibold text-[var(--muted)]">Button Label</label><input value={form.ctaLabel} onChange={e=>setForm({...form,ctaLabel:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
-          <div><label className="text-xs font-semibold text-[var(--muted)]">Button Link</label><input value={form.ctaLink} onChange={e=>setForm({...form,ctaLink:e.target.value})} placeholder="#/category/toys" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Button Label</label><input value={form.cta_label} onChange={e=>setForm({...form,cta_label:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div><label className="text-xs font-semibold text-[var(--muted)]">Button Link</label><input value={form.cta_link} onChange={e=>setForm({...form,cta_link:e.target.value})} placeholder="#/category/toys" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
         </div>
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Background Colour</label>
-          <input type="color" value={form.bg.startsWith('#')?form.bg:'#EFE6FF'} onChange={e=>setForm({...form,bg:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg h-[38px] px-1 focus-ring" />
+          <input type="color" value={form.bg} onChange={e=>setForm({...form,bg:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg h-[38px] px-1 focus-ring" />
         </div>
         <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})} /> Active (visible on homepage)</label>
-        <button onClick={save} className="btn-primary w-full py-2.5 focus-ring">{isEdit ? 'Save Changes' : 'Add Banner'}</button>
+        <button onClick={save} disabled={saving||uploading} className="btn-primary w-full py-2.5 focus-ring">{saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Add Banner')}</button>
       </div>
     </Modal>
   );
 }
 
 function AdminBanners(){
-  const {banners, deleteBanner, reorderBanner, showToast} = useApp();
+  const { showToast } = useApp();
+  const [banners, setBanners] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
+  const loadBanners = ()=>{
+    setLoading(true);
+    sbAdmin.from('storefront_banners').select('*').eq('owner_id', SHOP_OWNER_ID).order('sort_order').then(({data, error})=>{
+      if(!error) setBanners((data||[]).map(mapDbBanner));
+      setLoading(false);
+    });
+  };
+
+  useEffect(()=>{ loadBanners(); },[]);
+
   const openAdd = ()=>{ setEditingBanner(null); setFormOpen(true); };
   const openEdit = (b)=>{ setEditingBanner(b); setFormOpen(true); };
-  const confirmDelete = ()=>{ deleteBanner(deleteConfirm.id); showToast('Banner deleted','🗑️'); setDeleteConfirm(null); };
+
+  const onSaved = (banner)=>{
+    setBanners(prev=>{
+      const exists = prev.some(b=>b.id===banner.id);
+      return exists ? prev.map(b=> b.id===banner.id ? banner : b) : [...prev, banner].sort((a,b)=>a.sortOrder-b.sortOrder);
+    });
+  };
+
+  const confirmDelete = async ()=>{
+    const { error } = await sbAdmin.from('storefront_banners').delete().eq('id', deleteConfirm.id);
+    if(error){ showToast('Could not delete banner','⚠️'); return; }
+    setBanners(prev=> prev.filter(b=>b.id!==deleteConfirm.id));
+    showToast('Banner deleted','🗑️');
+    setDeleteConfirm(null);
+  };
+
+  const reorder = async (id, direction)=>{
+    const idx = banners.findIndex(b=>b.id===id);
+    const swapIdx = idx + direction;
+    if(idx<0 || swapIdx<0 || swapIdx>=banners.length) return;
+    const a = banners[idx], b = banners[swapIdx];
+    const next = [...banners];
+    [next[idx], next[swapIdx]] = [{...b, sortOrder:a.sortOrder}, {...a, sortOrder:b.sortOrder}];
+    setBanners(next);
+    await sbAdmin.from('storefront_banners').update({ sort_order: a.sortOrder }).eq('id', b.id);
+    await sbAdmin.from('storefront_banners').update({ sort_order: b.sortOrder }).eq('id', a.id);
+  };
 
   return (
     <div className="fade-in max-w-3xl">
@@ -3876,28 +4028,32 @@ function AdminBanners(){
         <div className="text-xs text-[var(--muted)]">{banners.length} banner{banners.length!==1?'s':''} · order shown here matches the homepage carousel</div>
         <button onClick={openAdd} className="btn-primary px-4 py-2 text-sm focus-ring">+ Add Banner</button>
       </div>
-      <div className="flex flex-col gap-3">
-        {banners.map((b,i)=> (
-          <div key={b.id} className="card p-4">
-            <div className="rounded-xl p-4 mb-3 bg-cover bg-center" style={{background: b.image ? `url(${b.image}) center/cover` : b.bg}}>
-              <div className="font-display font-bold">{b.title} <span className="text-[var(--danger)]">{b.highlight}</span></div>
-              <div className="text-xs text-[var(--muted)] mt-1">{b.subtitle}</div>
-            </div>
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <Badge tone={b.active ? 'green' : 'amber'}>{b.active ? 'Active' : 'Hidden'}</Badge>
-              <div className="flex gap-2">
-                <button onClick={()=>reorderBanner(b.id,-1)} disabled={i===0} aria-label="Move up" className="w-9 h-9 rounded-full bg-gray-100 text-[var(--ink)] flex items-center justify-center focus-ring disabled:opacity-30">↑</button>
-                <button onClick={()=>reorderBanner(b.id,1)} disabled={i===banners.length-1} aria-label="Move down" className="w-9 h-9 rounded-full bg-gray-100 text-[var(--ink)] flex items-center justify-center focus-ring disabled:opacity-30">↓</button>
-                <button onClick={()=>openEdit(b)} className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring"><Icon.Edit/></button>
-                <button onClick={()=>setDeleteConfirm(b)} className="w-9 h-9 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring"><Icon.Close/></button>
+      {loading ? (
+        <div className="text-center text-sm text-[var(--muted)] py-10">Loading banners…</div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {banners.map((b,i)=> (
+            <div key={b.id} className="card p-4">
+              <div className="rounded-xl p-4 mb-3 bg-cover bg-center" style={{background: b.image ? `url(${b.image}) center/cover` : b.bg}}>
+                <div className="font-display font-bold">{b.title} <span className="text-[var(--danger)]">{b.highlight}</span></div>
+                <div className="text-xs text-[var(--muted)] mt-1">{b.subtitle}</div>
+              </div>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <Badge tone={b.active ? 'green' : 'amber'}>{b.active ? 'Active' : 'Hidden'}</Badge>
+                <div className="flex gap-2">
+                  <button onClick={()=>reorder(b.id,-1)} disabled={i===0} aria-label="Move up" className="w-9 h-9 rounded-full bg-gray-100 text-[var(--ink)] flex items-center justify-center focus-ring disabled:opacity-30">↑</button>
+                  <button onClick={()=>reorder(b.id,1)} disabled={i===banners.length-1} aria-label="Move down" className="w-9 h-9 rounded-full bg-gray-100 text-[var(--ink)] flex items-center justify-center focus-ring disabled:opacity-30">↓</button>
+                  <button onClick={()=>openEdit(b)} className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring"><Icon.Edit/></button>
+                  <button onClick={()=>setDeleteConfirm(b)} className="w-9 h-9 rounded-full bg-red-50 text-[var(--danger)] flex items-center justify-center focus-ring"><Icon.Close/></button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-        {banners.length===0 && <div className="text-center text-sm text-[var(--muted)] py-10">No banners yet. Add one to promote a sale or new arrivals.</div>}
-      </div>
+          ))}
+          {banners.length===0 && <div className="text-center text-sm text-[var(--muted)] py-10">No banners yet. Add one to promote a sale or new arrivals.</div>}
+        </div>
+      )}
 
-      {formOpen && <AdminBannerFormModal banner={editingBanner} onClose={()=>setFormOpen(false)} />}
+      {formOpen && <AdminBannerFormModal banner={editingBanner} sortOrder={banners.length} onSaved={onSaved} onClose={()=>setFormOpen(false)} />}
       {deleteConfirm && (
         <Modal onClose={()=>setDeleteConfirm(null)} title="Delete Banner">
           <p className="text-sm text-[var(--muted)]">Delete this banner? This can't be undone.</p>
@@ -3912,11 +4068,27 @@ function AdminBanners(){
 }
 
 function AdminSettings(){
-  const {storeSettings, setStoreSettings, showToast} = useApp();
-  const [form, setForm] = useState(storeSettings);
+  const { showToast } = useApp();
+  const [form, setForm] = useState(DEFAULT_STORE_SETTINGS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const save = ()=>{
-    setStoreSettings(form);
+  useEffect(()=>{
+    sbAdmin.from('storefront_settings').select('*').eq('owner_id', SHOP_OWNER_ID).maybeSingle().then(({data, error})=>{
+      if(!error && data) setForm(mapDbStoreSettings(data));
+      setLoading(false);
+    });
+  },[]);
+
+  const save = async ()=>{
+    setSaving(true);
+    const { error } = await sbAdmin.from('storefront_settings').update({
+      store_name: form.storeName, address_line: form.addressLine, area: form.area, city: form.city,
+      pincode: form.pincode, phone: form.phone, email: form.email,
+      hours_weekday: form.hoursWeekday, hours_sunday: form.hoursSunday,
+    }).eq('owner_id', SHOP_OWNER_ID);
+    setSaving(false);
+    if(error){ showToast('Could not save settings','⚠️'); return; }
     showToast('Store settings saved','✅');
   };
 
@@ -3927,6 +4099,10 @@ function AdminSettings(){
         className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
     </div>
   );
+
+  if(loading){
+    return <div className="fade-in max-w-lg text-center text-sm text-[var(--muted)] py-10">Loading settings…</div>;
+  }
 
   return (
     <div className="fade-in max-w-lg">
@@ -3946,7 +4122,7 @@ function AdminSettings(){
           {field('hoursWeekday','Weekday Hours')}
           {field('hoursSunday','Sunday Hours')}
         </div>
-        <button onClick={save} className="btn-primary w-full py-2.5 mt-2 focus-ring">Save Store Settings</button>
+        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 mt-2 focus-ring">{saving ? 'Saving…' : 'Save Store Settings'}</button>
       </div>
     </div>
   );
