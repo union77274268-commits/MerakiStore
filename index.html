@@ -192,6 +192,8 @@ const CATEGORY_DB_TO_SLUG = {
   'Art/Craft Toys': 'art-craft-toys',
 };
 
+const slugify = (s)=> (s||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+
 const BRANDS = ['Classmate','Camlin','DOMS','Natraj','Apsara','Flair','Faber-Castell','Funskool','Joyo','Luvely'];
 
 function P(id,name,category,sub,brand,price,mrp,rating,reviews,stock,emoji,bg,desc,tags,variants){
@@ -470,6 +472,11 @@ function AppProvider({children}){
 
   const signIn = useCallback(async ({email, password})=>{
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if(error) return { data, error };
+    if(data.user && !data.user.email_confirmed_at){
+      await sb.auth.signOut();
+      return { data: null, error: { message: 'Please confirm your email before logging in. Check your inbox for the confirmation link.' } };
+    }
     return { data, error };
   },[]);
 
@@ -503,7 +510,7 @@ function AppProvider({children}){
 
   useEffect(()=>{ fetchProducts(); },[fetchProducts]);
 
-  useEffect(()=>{
+  const fetchBannersAndSettings = useCallback(()=>{
     sb.from('storefront_banners').select('*').eq('active', true).order('sort_order').then(({data, error})=>{
       if(!error && data && data.length){ setBanners(data.map(mapDbBanner)); }
     });
@@ -511,6 +518,19 @@ function AppProvider({children}){
       if(!error && data){ setStoreSettings(mapDbStoreSettings(data)); }
     });
   },[]);
+
+  useEffect(()=>{ fetchBannersAndSettings(); },[fetchBannersAndSettings]);
+
+  // Realtime: live product catalog + storefront config, no reload needed.
+  useEffect(()=>{
+    const channel = sb.channel('public-storefront-live')
+      .on('postgres_changes', {event:'*', schema:'public', table:'items'}, ()=> fetchProducts())
+      .on('postgres_changes', {event:'*', schema:'public', table:'product_images'}, ()=> fetchProducts())
+      .on('postgres_changes', {event:'*', schema:'public', table:'storefront_banners'}, ()=> fetchBannersAndSettings())
+      .on('postgres_changes', {event:'*', schema:'public', table:'storefront_settings'}, ()=> fetchBannersAndSettings())
+      .subscribe();
+    return ()=> sb.removeChannel(channel);
+  },[fetchProducts, fetchBannersAndSettings]);
 
   useEffect(()=>{
     document.documentElement.classList.toggle('dark', darkMode);
@@ -545,17 +565,44 @@ function AppProvider({children}){
 
   useEffect(()=>{ fetchOrders(); },[fetchOrders]);
 
-  useEffect(()=>{
-    if(!session){ setCart([]); setWishlist([]); return; }
+  const fetchCart = useCallback(()=>{
+    if(!session) return;
     sb.from('customer_cart_items').select('product_id, quantity').eq('customer_id', session.user.id)
       .then(({data, error})=>{
         if(!error && data) setCart(data.map(r=> ({id:r.product_id, qty:r.quantity})));
       });
+  },[session]);
+
+  const fetchWishlist = useCallback(()=>{
+    if(!session) return;
     sb.from('customer_wishlist').select('product_id').eq('customer_id', session.user.id)
       .then(({data, error})=>{
         if(!error && data) setWishlist(data.map(r=> r.product_id));
       });
   },[session]);
+
+  useEffect(()=>{
+    if(!session){ setCart([]); setWishlist([]); return; }
+    fetchCart();
+    fetchWishlist();
+  },[session, fetchCart, fetchWishlist]);
+
+  // Realtime: this customer's own orders, cart, wishlist and profile — updates
+  // instantly across tabs/devices (and when the admin changes an order status)
+  // without needing a page reload.
+  useEffect(()=>{
+    if(!session) return;
+    const uid = session.user.id;
+    const channel = sb.channel('customer-live-'+uid)
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_orders', filter:'customer_id=eq.'+uid}, ()=> fetchOrders())
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_order_items'}, ()=> fetchOrders())
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_payments'}, ()=> fetchOrders())
+      .on('postgres_changes', {event:'*', schema:'public', table:'customer_cart_items', filter:'customer_id=eq.'+uid}, ()=> fetchCart())
+      .on('postgres_changes', {event:'*', schema:'public', table:'customer_wishlist', filter:'customer_id=eq.'+uid}, ()=> fetchWishlist())
+      .on('postgres_changes', {event:'*', schema:'public', table:'customer_profiles', filter:'id=eq.'+uid}, ()=> fetchProfile(uid))
+      .subscribe();
+    return ()=> sb.removeChannel(channel);
+  },[session, fetchOrders, fetchCart, fetchWishlist, fetchProfile]);
 
   const addToCart = useCallback((id, qty=1)=>{
     let finalQty = qty;
@@ -1604,7 +1651,7 @@ function BannerCarousel({banners}){
                 </div>
               </div>
               <div className="hidden md:flex items-center gap-3 text-7xl mt-6 md:mt-0">
-  
+                <span>🎒</span><span>🧸</span><span>🖍️</span>
               </div>
             </div>
           </div>
@@ -1763,32 +1810,51 @@ function Footer(){
 /* ============================= CATEGORY / LISTING PAGE ============================= */
 
 function CategoryPage({route}){
-  const catId = route.parts[1] || 'stationery';
-  const cat = CATEGORIES.find(c=>c.id===catId) || CATEGORIES[0];
+  const routeParam = route.parts[1] || '';
+  const {products, productsLoading} = useApp();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [sort, setSort] = useState('popular');
   const [priceMax, setPriceMax] = useState(1000);
   const [brandFilter, setBrandFilter] = useState([]);
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [subFilter, setSubFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [view, setView] = useState('grid');
-  const {products, productsLoading} = useApp();
 
   useEffect(()=>{
-    setSubFilter('all');
     setPriceMax(1000);
     setBrandFilter([]);
     setInStockOnly(false);
     setSort('popular');
-  },[catId]);
+    setCategoryFilter('all');
+  },[routeParam]);
 
-  const base = products.filter(p=>p.category===catId);
-  const subcats = useMemo(()=> Array.from(new Set(base.map(p=>p.sub))), [catId]);
-  const brands = useMemo(()=> Array.from(new Set(base.map(p=>p.brand))), [catId]);
+  // Rail lists every subcategory (brand) across the whole catalog.
+  const allSubcats = useMemo(()=> Array.from(new Set(products.map(p=>p.sub).filter(Boolean))).sort(), [products]);
+  const subSlugMap = useMemo(()=>{
+    const m = {}; allSubcats.forEach(s=> m[slugify(s)] = s); return m;
+  },[allSubcats]);
+
+  const matchedCategory = CATEGORIES.find(c=>c.id===routeParam);
+  const matchedSubLabel = subSlugMap[routeParam];
+  const activeSlug = matchedCategory ? matchedCategory.id : (matchedSubLabel ? routeParam : '');
+
+  let base, headerLabel, headerIcon;
+  if(matchedCategory){
+    base = products.filter(p=>p.category===matchedCategory.id);
+    headerLabel = matchedCategory.name; headerIcon = matchedCategory.icon;
+  } else if(matchedSubLabel){
+    base = products.filter(p=>p.sub===matchedSubLabel);
+    headerLabel = matchedSubLabel; headerIcon = '🏷️';
+  } else {
+    base = products;
+    headerLabel = 'All Products'; headerIcon = '🛍️';
+  }
+
+  const brands = useMemo(()=> Array.from(new Set(base.map(p=>p.brand))), [base]);
 
   let list = base.filter(p=> p.price<=priceMax);
-  if(subFilter!=='all') list = list.filter(p=>p.sub===subFilter);
+  if(categoryFilter!=='all') list = list.filter(p=>p.category===categoryFilter);
   if(brandFilter.length) list = list.filter(p=>brandFilter.includes(p.brand));
   if(inStockOnly) list = list.filter(p=>p.stock>0);
 
@@ -1802,24 +1868,25 @@ function CategoryPage({route}){
 
   return (
     <div className="fade-in flex h-[calc(100vh-118px)] md:h-[calc(100vh-100px)] overflow-hidden">
-      {/* Zepto-style left category rail — scrolls independently */}
+      {/* Left rail — every subcategory (brand) in the catalog, scrolls independently */}
       <div className="w-[72px] sm:w-[87px] flex-shrink-0 border-r border-[var(--line)] bg-white overflow-y-auto scrollbar-none h-full">
-        {CATEGORIES.map(c=>{
-          const active = c.id===catId;
+        {allSubcats.map(s=>{
+          const slug = slugify(s);
+          const active = activeSlug===slug;
           return (
-            <a key={c.id} href={"#/category/"+c.id}
+            <a key={s} href={"#/category/"+slug}
               className={"flex flex-col items-center gap-1 py-4 px-1 text-center border-l-[3px] transition-colors focus-ring "+
                 (active ? 'border-[var(--purple)] bg-[var(--purple-light)]' : 'border-transparent hover:bg-gray-50')}>
-              <div className={"text-xl transition-transform "+(active?'scale-110':'')}>{c.icon}</div>
-              <div className={"text-[10px] font-bold leading-tight "+(active?'text-[var(--purple)]':'text-[var(--muted)]')}>{c.name}</div>
+              <div className={"text-xl transition-transform "+(active?'scale-110':'')}>🏷️</div>
+              <div className={"text-[10px] font-bold leading-tight break-words "+(active?'text-[var(--purple)]':'text-[var(--muted)]')}>{s}</div>
             </a>
           );
         })}
       </div>
 
-      <div key={catId} className="flex-1 min-w-0 px-3 md:px-6 py-3 overflow-y-auto h-full fade-in">
+      <div key={routeParam} className="flex-1 min-w-0 px-3 md:px-6 py-3 overflow-y-auto h-full fade-in">
         <div className="hidden md:block mb-2">
-          <h1 className="font-display font-bold text-2xl">{cat.icon} {cat.name}</h1>
+          <h1 className="font-display font-bold text-2xl">{headerIcon} {headerLabel}</h1>
           <div className="text-sm text-[var(--muted)]">{list.length} products</div>
         </div>
 
@@ -1832,13 +1899,11 @@ function CategoryPage({route}){
               <button onClick={()=>setView('list')} className={"chip px-2 "+(view==='list'?'active':'')}>≡</button>
             </div>
           </div>
-          <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(subFilter!=='all'||brandFilter.length||inStockOnly) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
-          {subcats.length>0 && (
-            <div className="flex gap-2 overflow-x-auto scrollbar-none">
-              <button onClick={()=>setSubFilter('all')} className={"chip "+(subFilter==='all'?'active':'')}>All</button>
-              {subcats.map(s=> <button key={s} onClick={()=>setSubFilter(s)} className={"chip "+(subFilter===s?'active':'')}>{s}</button>)}
-            </div>
-          )}
+          <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(categoryFilter!=='all'||brandFilter.length||inStockOnly) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
+          <div className="flex gap-2 overflow-x-auto scrollbar-none">
+            <button onClick={()=>setCategoryFilter('all')} className={"chip "+(categoryFilter==='all'?'active':'')}>All</button>
+            {CATEGORIES.map(c=> <button key={c.id} onClick={()=>setCategoryFilter(c.id)} className={"chip "+(categoryFilter===c.id?'active':'')}>{c.icon} {c.name}</button>)}
+          </div>
         </div>
         {productsLoading ? (
           <ProductGridSkeleton count={6} cols="grid-cols-2 lg:grid-cols-3" />
@@ -1849,7 +1914,7 @@ function CategoryPage({route}){
 
       {filtersOpen && (
         <Modal onClose={()=>setFiltersOpen(false)} title="Filters">
-          <FilterPanel {...{subcats, subFilter, setSubFilter, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}} />
+          <FilterPanel {...{categoryFilter, setCategoryFilter, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}} />
           <button onClick={()=>setFiltersOpen(false)} className="btn-primary w-full py-2.5 mt-4 focus-ring">Apply Filters</button>
         </Modal>
       )}
@@ -1866,15 +1931,15 @@ function CategoryPage({route}){
   );
 }
 
-function FilterPanel({subcats, subFilter, setSubFilter, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}){
+function FilterPanel({categoryFilter, setCategoryFilter, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}){
   const toggleBrand = (b)=> setBrandFilter(prev=> prev.includes(b) ? prev.filter(x=>x!==b) : [...prev,b]);
   return (
     <div className="space-y-5">
       <div>
-        <div className="font-bold text-sm mb-2">Categories</div>
+        <div className="font-bold text-sm mb-2">Category</div>
         <div className="flex flex-col gap-1.5 text-sm">
-          <label className="flex items-center gap-2"><input type="radio" checked={subFilter==='all'} onChange={()=>setSubFilter('all')} /> All</label>
-          {subcats.map(s=> <label key={s} className="flex items-center gap-2"><input type="radio" checked={subFilter===s} onChange={()=>setSubFilter(s)} /> {s}</label>)}
+          <label className="flex items-center gap-2"><input type="radio" checked={categoryFilter==='all'} onChange={()=>setCategoryFilter('all')} /> All</label>
+          {CATEGORIES.map(c=> <label key={c.id} className="flex items-center gap-2"><input type="radio" checked={categoryFilter===c.id} onChange={()=>setCategoryFilter(c.id)} /> {c.icon} {c.name}</label>)}
         </div>
       </div>
       <div>
@@ -2892,18 +2957,8 @@ function SearchPage(){
     p.brand.toLowerCase().includes(term)
   ) : [];
 
-  const onType = (e)=>{
-    const v = e.target.value;
-    setTerm(v.toLowerCase());
-    window.history.replaceState(null,'', v.trim() ? '#/search?q='+encodeURIComponent(v.trim()) : '#/search');
-  };
-
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-8">
-      <div className="desktop-only flex items-center bg-[#F5F2FB] rounded-xl px-3 py-2.5 gap-2 mb-4">
-        <span className="text-[var(--muted)]">🔍</span>
-        <input autoFocus value={term} onChange={onType} placeholder="Search for toys, stationery, art supplies..." className="bg-transparent outline-none text-sm w-full" />
-      </div>
       {!term ? (
         <div className="text-center py-16 text-[var(--muted)]">
           <div className="text-4xl mb-2">🔎</div>
@@ -3572,14 +3627,27 @@ function AdminDashboard(){
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
 
-  useEffect(()=>{
+  const loadItems = ()=>{
     sbAdmin.from('items').select('*').eq('owner_id', SHOP_OWNER_ID).then(({data, error})=>{
       if(!error) setItems(data || []);
       setItemsLoading(false);
     });
+  };
+  const loadOrders = ()=>{
     sbAdmin.from('online_orders').select('*, online_order_items(*), online_payments(*)').eq('owner_id', SHOP_OWNER_ID).order('created_at',{ascending:false}).then(({data, error})=>{
       if(!error) setOrders((data||[]).map(row=> mapDbOrder(row, null)));
     });
+  };
+
+  useEffect(()=>{ loadItems(); loadOrders(); },[]);
+
+  useEffect(()=>{
+    const channel = sbAdmin.channel('admin-dashboard-live')
+      .on('postgres_changes', {event:'*', schema:'public', table:'items', filter:'owner_id=eq.'+SHOP_OWNER_ID}, ()=> loadItems())
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_orders', filter:'owner_id=eq.'+SHOP_OWNER_ID}, ()=> loadOrders())
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_order_items'}, ()=> loadOrders())
+      .subscribe();
+    return ()=> sbAdmin.removeChannel(channel);
   },[]);
 
   const totalRevenue = orders.reduce((s,o)=> s+o.total, 0);
@@ -3765,6 +3833,13 @@ function AdminProducts(){
 
   useEffect(()=>{ loadItems(); },[]);
 
+  useEffect(()=>{
+    const channel = sbAdmin.channel('admin-items-live')
+      .on('postgres_changes', {event:'*', schema:'public', table:'items', filter:'owner_id=eq.'+SHOP_OWNER_ID}, ()=> loadItems())
+      .subscribe();
+    return ()=> sbAdmin.removeChannel(channel);
+  },[]);
+
   const categories = useMemo(()=> Array.from(new Set(items.map(i=>i.category))).sort(), [items]);
 
   const filtered = items.filter(i=>
@@ -3902,6 +3977,15 @@ function AdminOrders(){
   };
 
   useEffect(()=>{ loadOrders(); },[]);
+
+  useEffect(()=>{
+    const channel = sbAdmin.channel('admin-orders-live')
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_orders', filter:'owner_id=eq.'+SHOP_OWNER_ID}, ()=> loadOrders())
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_order_items'}, ()=> loadOrders())
+      .on('postgres_changes', {event:'*', schema:'public', table:'online_payments'}, ()=> loadOrders())
+      .subscribe();
+    return ()=> sbAdmin.removeChannel(channel);
+  },[]);
 
   const onUpdated = (updated)=>{
     setOrders(prev=> prev.map(o=> o.id===updated.id ? updated : o));
@@ -4227,6 +4311,25 @@ function PageRouter({route}){
   }
 }
 
+function AuthShellBackground(){
+  return (
+    <div className="fixed inset-0 -z-10 overflow-hidden" style={{background:'linear-gradient(160deg,#F6EEFF 0%,#FBFAFE 45%,#FFF8EF 100%)'}}>
+      <div className="absolute -top-20 -left-24 w-72 h-72 rounded-full opacity-60" style={{background:'radial-gradient(circle, rgba(108,63,197,0.18), transparent 70%)'}}></div>
+      <div className="absolute top-1/3 -right-28 w-80 h-80 rounded-full opacity-60" style={{background:'radial-gradient(circle, rgba(245,166,35,0.16), transparent 70%)'}}></div>
+      <div className="absolute -bottom-24 left-1/4 w-72 h-72 rounded-full opacity-60" style={{background:'radial-gradient(circle, rgba(30,158,90,0.14), transparent 70%)'}}></div>
+    </div>
+  );
+}
+
+function AuthInput({icon, ...props}){
+  return (
+    <div className="relative">
+      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none">{icon}</span>
+      <input {...props} className="w-full border border-[var(--line)] rounded-xl pl-10 pr-3 py-2.5 text-sm focus-ring bg-[#FBFAFE] focus:bg-white transition-colors" />
+    </div>
+  );
+}
+
 function LoggedOutScreen(){
   const { signUp, signIn, showToast } = useApp();
   const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'check-email'
@@ -4262,58 +4365,70 @@ function LoggedOutScreen(){
 
   if(mode==='check-email'){
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
-        <LogoBlock />
-        <div className="text-6xl mt-8 mb-2">📬</div>
-        <h1 className="font-display font-bold text-xl mt-2">Almost there!</h1>
-        <p className="text-sm text-[var(--muted)] mt-2 max-w-xs">We've sent a confirmation link to <b>{form.email}</b>. Tap it, then come back and log in.</p>
-        <button onClick={()=>setMode('signin')} className="btn-primary px-8 py-3 text-sm mt-6 focus-ring">Back to Log In</button>
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in relative">
+        <AuthShellBackground />
+        <div className="card w-full max-w-sm p-8 shadow-xl">
+          <Logo size="text-3xl" />
+          <div className="text-6xl mt-6 mb-2">📬</div>
+          <h1 className="font-display font-bold text-xl mt-2">Almost there!</h1>
+          <p className="text-sm text-[var(--muted)] mt-2">We've sent a confirmation link to <b>{form.email}</b>. Tap it, then come back and log in.</p>
+          <button onClick={()=>setMode('signin')} className="btn-primary w-full py-3 text-sm mt-6 focus-ring">Back to Log In</button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 text-center fade-in" style={{background:'linear-gradient(160deg,#F6EEFF,#FBFAFE)'}}>
-      <LogoBlock />
-      <h1 className="font-display font-bold text-xl mt-4">{mode==='signin' ? 'Welcome back! 👋' : 'Create your account ✨'}</h1>
-      <p className="text-sm text-[var(--muted)] mt-1 max-w-xs">{mode==='signin' ? 'Log in to shop, track orders and manage your wishlist.' : 'Sign up to start shopping at Meraki.'}</p>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 text-center fade-in relative">
+      <AuthShellBackground />
+      <div className="mb-6">
+        <Logo size="text-4xl" />
+        <div className="text-xs font-bold text-[var(--muted)] tracking-[0.2em] uppercase mt-1">Stationery &amp; Toys</div>
+      </div>
 
-      <form onSubmit={submit} className="w-full max-w-xs mt-6 space-y-3 text-left">
-        {mode==='signup' && (
-          <React.Fragment>
-            <div>
-              <label className="text-xs font-semibold text-[var(--muted)]">Full Name</label>
-              <input value={form.fullName} onChange={e=>update('fullName',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
+      <div className="card w-full max-w-sm p-7 shadow-xl text-left rise-in">
+        <h1 className="font-display font-bold text-xl text-center">{mode==='signin' ? 'Welcome back! 👋' : 'Create your account ✨'}</h1>
+        <p className="text-sm text-[var(--muted)] mt-1 text-center">{mode==='signin' ? 'Log in to shop, track orders and manage your wishlist.' : 'Sign up to start shopping at Meraki.'}</p>
+
+        <form onSubmit={submit} className="mt-6 space-y-3">
+          {mode==='signup' && (
+            <React.Fragment>
               <div>
-                <label className="text-xs font-semibold text-[var(--muted)]">Username</label>
-                <input value={form.username} onChange={e=>update('username',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+                <label className="text-xs font-semibold text-[var(--muted)]">Full Name</label>
+                <div className="mt-1"><AuthInput icon="👤" value={form.fullName} onChange={e=>update('fullName',e.target.value)} /></div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-[var(--muted)]">Phone</label>
-                <input value={form.phone} onChange={e=>update('phone',e.target.value.replace(/\D/g,'').slice(0,10))} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-semibold text-[var(--muted)]">Username</label>
+                  <div className="mt-1"><AuthInput icon="@" value={form.username} onChange={e=>update('username',e.target.value)} /></div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-[var(--muted)]">Phone</label>
+                  <div className="mt-1"><AuthInput icon="📞" value={form.phone} onChange={e=>update('phone',e.target.value.replace(/\D/g,'').slice(0,10))} /></div>
+                </div>
               </div>
-            </div>
-          </React.Fragment>
-        )}
-        <div>
-          <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
-          <input type="email" value={form.email} onChange={e=>update('email',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-[var(--muted)]">Password</label>
-          <input type="password" value={form.password} onChange={e=>update('password',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
-        </div>
-        {error && <div className="text-xs text-[var(--danger)] font-semibold">{error}</div>}
-        <button type="submit" disabled={submitting} className="btn-primary w-full py-3 text-sm focus-ring">
-          {submitting ? 'Please wait…' : (mode==='signin' ? 'Log In' : 'Create Account')}
+            </React.Fragment>
+          )}
+          <div>
+            <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
+            <div className="mt-1"><AuthInput icon="✉️" type="email" value={form.email} onChange={e=>update('email',e.target.value)} /></div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-[var(--muted)]">Password</label>
+            <div className="mt-1"><AuthInput icon="🔒" type="password" value={form.password} onChange={e=>update('password',e.target.value)} /></div>
+          </div>
+          {error && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+          <button type="submit" disabled={submitting} className="btn-primary w-full py-3 text-sm focus-ring mt-1">
+            {submitting ? 'Please wait…' : (mode==='signin' ? 'Log In' : 'Create Account')}
+          </button>
+        </form>
+
+        <button onClick={()=>{ setMode(mode==='signin'?'signup':'signin'); setError(''); }} className="text-sm font-bold text-[var(--purple)] mt-5 focus-ring block mx-auto">
+          {mode==='signin' ? "New here? Create an account" : "Already have an account? Log in"}
         </button>
-      </form>
+      </div>
 
-      <button onClick={()=>{ setMode(mode==='signin'?'signup':'signin'); setError(''); }} className="text-sm font-bold text-[var(--purple)] mt-5 focus-ring">
-        {mode==='signin' ? "New here? Create an account" : "Already have an account? Log in"}
-      </button>
+      <div className="text-[11px] text-[var(--muted)] mt-6">✨ Everything they need, delivered with care.</div>
     </div>
   );
 }
