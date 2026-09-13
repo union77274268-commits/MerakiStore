@@ -1842,13 +1842,13 @@ function CategoryPage({route}){
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [sort, setSort] = useState('popular');
-  const [priceMax, setPriceMax] = useState(1000);
+  const [priceMax, setPriceMax] = useState(null); // null = no cap applied yet
   const [brandFilter, setBrandFilter] = useState([]);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [view, setView] = useState('grid');
 
   useEffect(()=>{
-    setPriceMax(1000);
+    setPriceMax(null);
     setBrandFilter([]);
     setInStockOnly(false);
     setSort('popular');
@@ -1861,8 +1861,13 @@ function CategoryPage({route}){
   const headerIcon = matchedCategory ? matchedCategory.icon : '🛍️';
 
   const brands = useMemo(()=> Array.from(new Set(base.map(p=>p.brand))), [base]);
+  // The real ceiling for this category's price slider — never caps products by
+  // default; a filter is only "active" once the shopper actually drags it down.
+  const priceCeiling = useMemo(()=> Math.max(1000, ...base.map(p=>p.price), 0), [base]);
+  const effectivePriceMax = priceMax==null ? priceCeiling : priceMax;
+  const priceFilterActive = priceMax!=null && priceMax < priceCeiling;
 
-  let list = base.filter(p=> p.price<=priceMax);
+  let list = base.filter(p=> p.price<=effectivePriceMax);
   if(brandFilter.length) list = list.filter(p=>brandFilter.includes(p.brand));
   if(inStockOnly) list = list.filter(p=>p.stock>0);
 
@@ -1906,7 +1911,7 @@ function CategoryPage({route}){
               <button onClick={()=>setView('list')} className={"chip px-2 "+(view==='list'?'active':'')}>≡</button>
             </div>
           </div>
-          <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(brandFilter.length||inStockOnly) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
+          <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(brandFilter.length||inStockOnly||priceFilterActive) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
         </div>
         {productsLoading ? (
           <ProductGridSkeleton count={6} cols="grid-cols-2 lg:grid-cols-3" />
@@ -1917,7 +1922,7 @@ function CategoryPage({route}){
 
       {filtersOpen && (
         <Modal onClose={()=>setFiltersOpen(false)} title="Filters">
-          <FilterPanel {...{categories, activeCategoryId: matchedCategory && matchedCategory.id, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}} onNavigate={()=>setFiltersOpen(false)} />
+          <FilterPanel {...{categories, activeCategoryId: matchedCategory && matchedCategory.id, priceMax: effectivePriceMax, priceCeiling, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly}} onNavigate={()=>setFiltersOpen(false)} />
           <button onClick={()=>setFiltersOpen(false)} className="btn-primary w-full py-2.5 mt-4 focus-ring">Apply Filters</button>
         </Modal>
       )}
@@ -1934,7 +1939,7 @@ function CategoryPage({route}){
   );
 }
 
-function FilterPanel({categories, activeCategoryId, priceMax, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly, onNavigate}){
+function FilterPanel({categories, activeCategoryId, priceMax, priceCeiling, setPriceMax, brands, brandFilter, setBrandFilter, inStockOnly, setInStockOnly, onNavigate}){
   const toggleBrand = (b)=> setBrandFilter(prev=> prev.includes(b) ? prev.filter(x=>x!==b) : [...prev,b]);
   return (
     <div className="space-y-5">
@@ -1951,8 +1956,8 @@ function FilterPanel({categories, activeCategoryId, priceMax, setPriceMax, brand
       </div>
       <div>
         <div className="font-bold text-sm mb-2">Price</div>
-        <input type="range" min="0" max="1000" value={priceMax} onChange={e=>setPriceMax(Number(e.target.value))} className="w-full accent-[var(--purple)]" />
-        <div className="flex justify-between text-xs text-[var(--muted)]"><span>₹0</span><span>{priceMax>=1000?'₹1000+':inr(priceMax)}</span></div>
+        <input type="range" min="0" max={priceCeiling} value={priceMax} onChange={e=>setPriceMax(Number(e.target.value))} className="w-full accent-[var(--purple)]" />
+        <div className="flex justify-between text-xs text-[var(--muted)]"><span>₹0</span><span>{priceMax>=priceCeiling?inr(priceCeiling)+'+':inr(priceMax)}</span></div>
       </div>
       <div>
         <div className="font-bold text-sm mb-2">Brand</div>
