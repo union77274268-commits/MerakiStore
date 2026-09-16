@@ -272,6 +272,24 @@ const DEFAULT_STORE_SETTINGS = {
 // inventory) into the shape the rest of the UI already expects. Real inventory
 // has no MRP/discount/rating concept, so those are left honest (no discount,
 // no fabricated rating) rather than invented.
+// Named colours we can turn into an actual swatch on the storefront when a variant's type reads
+// as a colour (e.g. "Ink Colour"). Falls back to a neutral dot + the name as a tooltip otherwise.
+const COLOR_NAME_HEX = {
+  red:'#dc2626', blue:'#2563eb', black:'#111827', green:'#16a34a', yellow:'#eab308',
+  orange:'#f97316', purple:'#9333ea', pink:'#ec4899', white:'#ffffff', grey:'#6b7280', gray:'#6b7280',
+  brown:'#92400e', maroon:'#7f1d1d', navy:'#1e3a8a', turquoise:'#14b8a6', gold:'#ca8a04', silver:'#9ca3af',
+  violet:'#7c3aed', magenta:'#d946ef', cyan:'#06b6d4', teal:'#0d9488', beige:'#e8dcc8', peach:'#ffcba4',
+  lavender:'#c4b5fd', cream:'#fdf6e3', tan:'#d2b48c', indigo:'#4f46e5', olive:'#65a30d', sky:'#0ea5e9',
+};
+function colorNameToHex(name){
+  if(!name) return null;
+  const key = name.toLowerCase().trim();
+  if(COLOR_NAME_HEX[key]) return COLOR_NAME_HEX[key];
+  for(const w of key.split(/\s+/)) if(COLOR_NAME_HEX[w]) return COLOR_NAME_HEX[w];
+  return null;
+}
+function isColorVariantType(type){ return /colou?r/i.test(type||""); }
+
 function mapDbProduct(row, variants){
   const slug = slugify(row.category);
   const meta = getCategoryMeta(row.category);
@@ -1068,11 +1086,13 @@ function ProductCard({product}){
         <div className="text-[13px] font-semibold leading-snug line-clamp-2 min-h-[34px]">{product.name}</div>
       </a>
       {product.variants && (
-        <div className="flex items-center gap-1 mt-1 text-[10px] text-[var(--muted)]">
-          {product.variants[0].image ? (
-            product.variants.slice(0,4).map(v=> <img key={v.id} src={v.image} className="w-3.5 h-3.5 rounded-full border border-black/10 object-cover" />)
+        <div className="flex items-center gap-1 mt-1">
+          {isColorVariantType(product.variants[0].type) ? (
+            product.variants.slice(0,5).map(v=> <span key={v.id} title={v.label} className="w-3.5 h-3.5 rounded-full border border-black/10" style={{background: colorNameToHex(v.label) || '#d1d5db'}}></span>)
+          ) : product.variants[0].image ? (
+            product.variants.slice(0,4).map(v=> <img key={v.id} src={v.image} title={v.label} className="w-3.5 h-3.5 rounded-full border border-black/10 object-cover" />)
           ) : (
-            <span>{product.variants.length} {product.variants[0].type.toLowerCase()} options</span>
+            <span className="text-[10px] text-[var(--muted)]">{product.variants.length} {product.variants[0].type.toLowerCase()} options</span>
           )}
         </div>
       )}
@@ -2149,18 +2169,31 @@ function ProductPage({route}){
           {product.variants && (
             <div className="mt-4">
               <div className="text-sm font-semibold mb-1.5">{selectedVariant.type}: <span className="text-[var(--muted)] font-normal">{selectedVariant.label}</span></div>
-              <div className="flex flex-wrap gap-2">
-                {product.variants.map((v,i)=> (
-                  <button key={v.id} aria-label={v.label} onClick={()=>{ setVariantIdx(i); setQty(1); }}
-                    disabled={v.stock<=0}
-                    className={"px-3 py-1.5 rounded-xl border-2 text-xs font-semibold transition-all focus-ring flex items-center gap-1.5 "+
-                      (i===variantIdx ? 'border-[var(--purple)] bg-[var(--purple-light)] text-[var(--purple)]' : 'border-[var(--line)] hover:border-[var(--purple)]')+
-                      (v.stock<=0 ? ' opacity-40 cursor-not-allowed line-through' : '')}>
-                    {v.image && <img src={v.image} className="w-5 h-5 rounded-full object-cover" />}
-                    {v.label}
-                  </button>
-                ))}
-              </div>
+              {isColorVariantType(selectedVariant.type) ? (
+                <div className="flex flex-wrap gap-2.5">
+                  {product.variants.map((v,i)=> (
+                    <button key={v.id} aria-label={v.label} title={v.label} onClick={()=>{ setVariantIdx(i); setQty(1); }}
+                      disabled={v.stock<=0}
+                      className={"w-9 h-9 rounded-full border-2 transition-all focus-ring flex items-center justify-center "+(i===variantIdx?'border-[var(--purple)] scale-110':'border-transparent hover:scale-105')+(v.stock<=0?' opacity-30 cursor-not-allowed':'')}
+                      style={{boxShadow: i===variantIdx ? '0 0 0 2px #fff, 0 0 0 3.5px var(--purple)' : '0 0 0 1px rgba(0,0,0,0.12)'}}>
+                      <span className="w-7 h-7 rounded-full" style={{background: colorNameToHex(v.label) || '#d1d5db'}}></span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {product.variants.map((v,i)=> (
+                    <button key={v.id} aria-label={v.label} onClick={()=>{ setVariantIdx(i); setQty(1); }}
+                      disabled={v.stock<=0}
+                      className={"px-3 py-1.5 rounded-xl border-2 text-xs font-semibold transition-all focus-ring flex items-center gap-1.5 "+
+                        (i===variantIdx ? 'border-[var(--purple)] bg-[var(--purple-light)] text-[var(--purple)]' : 'border-[var(--line)] hover:border-[var(--purple)]')+
+                        (v.stock<=0 ? ' opacity-40 cursor-not-allowed line-through' : '')}>
+                      {v.image && <img src={v.image} className="w-5 h-5 rounded-full object-cover" />}
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               {effectiveStock<=0 && <div className="text-xs text-[var(--danger)] mt-1.5">This option is out of stock</div>}
             </div>
           )}
