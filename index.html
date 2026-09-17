@@ -272,25 +272,7 @@ const DEFAULT_STORE_SETTINGS = {
 // inventory) into the shape the rest of the UI already expects. Real inventory
 // has no MRP/discount/rating concept, so those are left honest (no discount,
 // no fabricated rating) rather than invented.
-// Named colours we can turn into an actual swatch on the storefront when a variant's type reads
-// as a colour (e.g. "Ink Colour"). Falls back to a neutral dot + the name as a tooltip otherwise.
-const COLOR_NAME_HEX = {
-  red:'#dc2626', blue:'#2563eb', black:'#111827', green:'#16a34a', yellow:'#eab308',
-  orange:'#f97316', purple:'#9333ea', pink:'#ec4899', white:'#ffffff', grey:'#6b7280', gray:'#6b7280',
-  brown:'#92400e', maroon:'#7f1d1d', navy:'#1e3a8a', turquoise:'#14b8a6', gold:'#ca8a04', silver:'#9ca3af',
-  violet:'#7c3aed', magenta:'#d946ef', cyan:'#06b6d4', teal:'#0d9488', beige:'#e8dcc8', peach:'#ffcba4',
-  lavender:'#c4b5fd', cream:'#fdf6e3', tan:'#d2b48c', indigo:'#4f46e5', olive:'#65a30d', sky:'#0ea5e9',
-};
-function colorNameToHex(name){
-  if(!name) return null;
-  const key = name.toLowerCase().trim();
-  if(COLOR_NAME_HEX[key]) return COLOR_NAME_HEX[key];
-  for(const w of key.split(/\s+/)) if(COLOR_NAME_HEX[w]) return COLOR_NAME_HEX[w];
-  return null;
-}
-function isColorVariantType(type){ return /colou?r/i.test(type||""); }
-
-function mapDbProduct(row, variants){
+function mapDbProduct(row){
   const slug = slugify(row.category);
   const meta = getCategoryMeta(row.category);
   return {
@@ -311,7 +293,7 @@ function mapDbProduct(row, variants){
     image: row.image_url || null,
     desc: row.description || '',
     tags: row.is_featured ? ['bestseller'] : [],
-    variants: (variants && variants.length) ? variants : null,
+    variants: null,
   };
 }
 
@@ -530,20 +512,9 @@ function AppProvider({children}){
   // ---- Real product catalog from your POS inventory ----
   const fetchProducts = useCallback(()=>{
     setProductsLoading(true);
-    Promise.all([
-      sb.from('storefront_products').select('*'),
-      sb.from('storefront_item_variants').select('*').order('sort_order')
-    ]).then(([{data, error}, variantsRes])=>{
+    sb.from('storefront_products').select('*').then(({data, error})=>{
       if(!error && data){
-        const variantsByItem = {};
-        (variantsRes.data||[]).forEach(v=>{
-          (variantsByItem[v.item_id] = variantsByItem[v.item_id] || []).push({
-            id: v.id, type: v.variant_type, label: v.variant_value,
-            price: v.price!=null ? Number(v.price) : null,
-            stock: v.stock, image: v.image_url || null, isDefault: !!v.is_default
-          });
-        });
-        setProducts(data.map(row=>mapDbProduct(row, variantsByItem[row.id])));
+        setProducts(data.map(mapDbProduct));
       } else if(error){
         console.error('Failed to load products from Supabase, using demo fallback', error);
         setProducts(DEFAULT_PRODUCTS);
@@ -622,9 +593,9 @@ function AppProvider({children}){
 
   const fetchCart = useCallback(()=>{
     if(!session) return;
-    sb.from('customer_cart_items').select('product_id, quantity, variant_id').eq('customer_id', session.user.id)
+    sb.from('customer_cart_items').select('product_id, quantity').eq('customer_id', session.user.id)
       .then(({data, error})=>{
-        if(!error && data) setCart(data.map(r=> ({id:r.product_id, qty:r.quantity, variantId:r.variant_id||null})));
+        if(!error && data) setCart(data.map(r=> ({id:r.product_id, qty:r.quantity})));
       });
   },[session]);
 
@@ -659,57 +630,51 @@ function AppProvider({children}){
     return ()=> sb.removeChannel(channel);
   },[session, fetchOrders, fetchCart, fetchWishlist, fetchProfile]);
 
-  // A cart line is identified by product id + variant id (null variant = the base product).
-  // customer_cart_items has no unique-index guarantee across NULL variant_id values, so instead of
-  // upsert-on-conflict we look up the existing row ourselves and insert/update/delete explicitly.
-  const persistCartLine = useCallback((id, variantId, qty)=>{
-    if(!session) return;
-    let q = sb.from('customer_cart_items').select('id').eq('customer_id', session.user.id).eq('product_id', id);
-    q = variantId ? q.eq('variant_id', variantId) : q.is('variant_id', null);
-    q.maybeSingle().then(({data:existing})=>{
-      if(qty<=0){
-        if(existing) sb.from('customer_cart_items').delete().eq('id', existing.id).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
-        return;
-      }
-      if(existing){
-        sb.from('customer_cart_items').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', existing.id)
-          .then(({error})=>{ if(error) console.error('Cart sync failed', error); });
-      } else {
-        sb.from('customer_cart_items').insert({ customer_id: session.user.id, product_id: id, variant_id: variantId||null, quantity: qty })
-          .then(({error})=>{ if(error) console.error('Cart sync failed', error); });
-      }
-    });
-  },[session]);
-
-  const addToCart = useCallback((id, qty=1, variantId=null)=>{
+  const addToCart = useCallback((id, qty=1)=>{
     let finalQty = qty;
     setCart(prev=>{
-      const existing = prev.find(c=>c.id===id && (c.variantId||null)===(variantId||null));
+      const existing = prev.find(c=>c.id===id);
       finalQty = existing ? clamp(existing.qty+qty,1,20) : clamp(qty,1,20);
       if(existing){
-        return prev.map(c=> (c.id===id && (c.variantId||null)===(variantId||null)) ? {...c, qty: finalQty} : c);
+        return prev.map(c=> c.id===id ? {...c, qty: finalQty} : c);
       }
-      return [...prev, {id, qty: finalQty, variantId: variantId||null}];
+      return [...prev, {id, qty: finalQty}];
     });
     showToast('Added to cart', '🛒');
-    if(session) persistCartLine(id, variantId, finalQty);
-  },[session, showToast, persistCartLine]);
+    if(session){
+      sb.from('customer_cart_items').upsert(
+        { customer_id: session.user.id, product_id: id, quantity: finalQty },
+        { onConflict: 'customer_id,product_id' }
+      ).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    }
+  },[session, showToast]);
 
-  const setCartQty = useCallback((id, qty, variantId=null)=>{
+  const setCartQty = useCallback((id, qty)=>{
     const clamped = clamp(qty,0,20);
     setCart(prev=>{
-      if(clamped<=0) return prev.filter(c=> !(c.id===id && (c.variantId||null)===(variantId||null)));
-      return prev.map(c=> (c.id===id && (c.variantId||null)===(variantId||null)) ? {...c, qty: clamped} : c);
+      if(clamped<=0) return prev.filter(c=>c.id!==id);
+      return prev.map(c=> c.id===id ? {...c, qty: clamped} : c);
     });
     if(!session) return;
-    persistCartLine(id, variantId, clamped);
-  },[session, persistCartLine]);
+    if(clamped<=0){
+      sb.from('customer_cart_items').delete().eq('customer_id', session.user.id).eq('product_id', id)
+        .then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    } else {
+      sb.from('customer_cart_items').upsert(
+        { customer_id: session.user.id, product_id: id, quantity: clamped },
+        { onConflict: 'customer_id,product_id' }
+      ).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    }
+  },[session]);
 
-  const removeFromCart = useCallback((id, variantId=null)=>{
-    setCart(prev=> prev.filter(c=> !(c.id===id && (c.variantId||null)===(variantId||null))));
+  const removeFromCart = useCallback((id)=>{
+    setCart(prev=> prev.filter(c=>c.id!==id));
     showToast('Removed from cart','🗑️');
-    if(session) persistCartLine(id, variantId, 0);
-  },[session, showToast, persistCartLine]);
+    if(session){
+      sb.from('customer_cart_items').delete().eq('customer_id', session.user.id).eq('product_id', id)
+        .then(({error})=>{ if(error) console.error('Cart sync failed', error); });
+    }
+  },[session, showToast]);
 
   const toggleWishlist = useCallback((id)=>{
     let adding = false;
@@ -739,18 +704,11 @@ function AppProvider({children}){
   },[addToCart, session]);
 
   const cartLines = useMemo(()=> cart
-    .map(c=>{
-      const product = productMap[c.id]; if(!product) return null;
-      const variant = c.variantId && product.variants ? product.variants.find(v=>v.id===c.variantId) : null;
-      const price = variant && variant.price!=null ? variant.price : product.price;
-      const mrp = variant && variant.price!=null ? variant.price : product.mrp;
-      const stock = variant ? variant.stock : product.stock;
-      return {...c, product, variant, price, mrp, stock};
-    })
-    .filter(Boolean), [cart, productMap]);
+    .map(c=> ({...c, product: productMap[c.id]}))
+    .filter(c=> c.product), [cart, productMap]);
 
-  const subtotal = useMemo(()=> cartLines.reduce((s,c)=> s + c.price*c.qty, 0), [cartLines]);
-  const mrpTotal = useMemo(()=> cartLines.reduce((s,c)=> s + c.mrp*c.qty, 0), [cartLines]);
+  const subtotal = useMemo(()=> cartLines.reduce((s,c)=> s + c.product.price*c.qty, 0), [cartLines]);
+  const mrpTotal = useMemo(()=> cartLines.reduce((s,c)=> s + c.product.mrp*c.qty, 0), [cartLines]);
   const savings = mrpTotal - subtotal;
   const deliveryCharge = subtotal===0 ? 0 : (subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_CHARGE);
   const packagingCharge = subtotal===0 ? 0 : PACKAGING_CHARGE;
@@ -781,8 +739,7 @@ function AppProvider({children}){
 
     const itemRows = cartLines.map(c=> ({
       order_id: orderRow.id, product_id: c.id, product_name: c.product.name,
-      quantity: c.qty, unit_price: c.price, discount: 0, total: c.price*c.qty,
-      variant_id: c.variantId || null, variant_label: c.variant ? (c.variant.type+': '+c.variant.label) : null,
+      quantity: c.qty, unit_price: c.product.price, discount: 0, total: c.product.price*c.qty,
     }));
     const { error: itemsErr } = await sb.from('online_order_items').insert(itemRows);
     if(itemsErr) console.error('Failed to insert order items', itemsErr);
@@ -1061,12 +1018,10 @@ function ProductImg({product, className, iconClass}){
 
 function ProductCard({product}){
   const {cart, addToCart, setCartQty, wishlist, toggleWishlist} = useApp();
-  const hasVariants = !!(product.variants && product.variants.length);
-  const line = !hasVariants ? cart.find(c=>c.id===product.id && !c.variantId) : null;
+  const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
   const quickBuy = (e)=>{
     e.preventDefault(); e.stopPropagation();
-    if(hasVariants){ navigate("#/product/"+product.id); return; }
     addToCart(product.id,1);
     navigate('#/checkout/address');
   };
@@ -1086,14 +1041,8 @@ function ProductCard({product}){
         <div className="text-[13px] font-semibold leading-snug line-clamp-2 min-h-[34px]">{product.name}</div>
       </a>
       {product.variants && (
-        <div className="flex items-center gap-1 mt-1">
-          {isColorVariantType(product.variants[0].type) ? (
-            product.variants.slice(0,5).map(v=> <span key={v.id} title={v.label} className="w-3.5 h-3.5 rounded-full border border-black/10" style={{background: colorNameToHex(v.label) || '#d1d5db'}}></span>)
-          ) : product.variants[0].image ? (
-            product.variants.slice(0,4).map(v=> <img key={v.id} src={v.image} title={v.label} className="w-3.5 h-3.5 rounded-full border border-black/10 object-cover" />)
-          ) : (
-            <span className="text-[10px] text-[var(--muted)]">{product.variants.length} {product.variants[0].type.toLowerCase()} options</span>
-          )}
+        <div className="flex gap-1 mt-1">
+          {product.variants.slice(0,4).map(v=> <span key={v.id} className="w-3.5 h-3.5 rounded-full border border-black/10" style={{background:v.color}}></span>)}
         </div>
       )}
       <div className="flex items-baseline gap-1.5 mt-1">
@@ -1103,9 +1052,7 @@ function ProductCard({product}){
       </div>
       <div className="mt-2 flex gap-1.5 items-center">
         <div className="flex-1">
-          {hasVariants ? (
-            <a href={"#/product/"+product.id} className="btn-primary w-full py-1.5 text-sm flex items-center justify-center gap-1 focus-ring">Select options</a>
-          ) : !line ? (
+          {!line ? (
             <button onClick={()=>addToCart(product.id,1)}
               className="btn-primary w-full py-1.5 text-sm flex items-center justify-center gap-1 focus-ring">
               <span>+</span> Add
@@ -1125,8 +1072,7 @@ function ProductCard({product}){
 
 function ProductListRow({product}){
   const {cart, addToCart, setCartQty, wishlist, toggleWishlist} = useApp();
-  const hasVariants = !!(product.variants && product.variants.length);
-  const line = !hasVariants ? cart.find(c=>c.id===product.id && !c.variantId) : null;
+  const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
   return (
     <div className="card p-2.5 flex gap-3 items-center">
@@ -1147,12 +1093,10 @@ function ProductListRow({product}){
         <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)} className="focus-ring">
           <span key={isWished} className={"pop inline-block "+(isWished?'text-[var(--danger)]':'text-gray-300')}><Icon.Heart active={isWished} /></span>
         </button>
-        {!hasVariants && !line ? (
+        {!line ? (
           <button onClick={()=>addToCart(product.id,1)} className="btn-primary px-3 py-1.5 text-xs focus-ring">+ Add</button>
-        ) : !hasVariants ? (
-          <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} small />
         ) : (
-          <a href={"#/product/"+product.id} className="btn-primary px-3 py-1.5 text-xs focus-ring">Select options</a>
+          <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} small />
         )}
       </div>
     </div>
@@ -2108,32 +2052,26 @@ function ProductPage({route}){
   const [locationOpen, setLocationOpen] = useState(false);
   const [variantIdx, setVariantIdx] = useState(0);
 
-  useEffect(()=>{
-    setQty(1);
-    const defaultIdx = product && product.variants ? Math.max(0, product.variants.findIndex(v=>v.isDefault)) : 0;
-    setVariantIdx(defaultIdx);
-  }, [id]);
+  useEffect(()=>{ setQty(1); setVariantIdx(0); }, [id]);
 
   if(!product) return <div className="p-8 text-center text-[var(--muted)]">Product not found. <a className="text-[var(--purple)] font-semibold" href="#/home">Go home</a></div>;
 
-  const selectedVariant = product.variants ? product.variants[variantIdx] : null;
-  const line = cart.find(c=>c.id===product.id && (c.variantId||null)===(selectedVariant?selectedVariant.id:null));
+  const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
   const related = products.filter(p=> p.category===product.category && p.id!==product.id).slice(0,8);
   const moreFromBrand = products.filter(p=> p.brand===product.brand && p.id!==product.id).slice(0,8);
-  const effectivePrice = selectedVariant && selectedVariant.price!=null ? selectedVariant.price : product.price;
-  const effectiveStock = selectedVariant ? selectedVariant.stock : product.stock;
+  const selectedVariant = product.variants ? product.variants[variantIdx] : null;
 
   const onQtyChange = (q)=>{
-    if(q<=0){ removeFromCart(product.id, selectedVariant?selectedVariant.id:null); return; }
-    setCartQty(product.id, q, selectedVariant?selectedVariant.id:null);
+    if(q<=0){ removeFromCart(product.id); return; }
+    setCartQty(product.id, q);
   };
 
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-10">
       <div className="md:grid md:grid-cols-2 md:gap-10">
         <div className="relative">
-          <ProductImg product={selectedVariant && selectedVariant.image ? {...product, image:selectedVariant.image} : product} className="w-full aspect-square text-7xl md:rounded-2xl" />
+          <ProductImg product={product} className="w-full aspect-square text-7xl md:rounded-2xl" />
           <div className="absolute top-3 right-3 flex flex-col gap-2">
             <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
               className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
@@ -2156,45 +2094,28 @@ function ProductPage({route}){
             <div className="text-xs text-[var(--muted)] mt-1.5">No reviews yet</div>
           )}
           <div className="flex items-baseline gap-2 mt-3">
-            <span className="font-bold text-2xl">{inr(effectivePrice)}</span>
+            <span className="font-bold text-2xl">{inr(product.price)}</span>
             {product.discount>0 && <span className="text-sm text-gray-400 line-through">{inr(product.mrp)}</span>}
             {product.discount>0 && <Badge tone="danger">{product.discount}% OFF</Badge>}
           </div>
           <div className="text-xs text-[var(--muted)] mt-1">Inclusive of all taxes</div>
           <div className="flex items-center gap-2 mt-3">
-            {effectiveStock>0 ? <Badge tone="green">In Stock</Badge> : <Badge tone="danger">Out of Stock</Badge>}
+            {product.stock>0 ? <Badge tone="green">In Stock</Badge> : <Badge tone="danger">Out of Stock</Badge>}
             <span className="text-xs text-[var(--muted)]">Ships in 2-4 hrs</span>
           </div>
 
           {product.variants && (
             <div className="mt-4">
-              <div className="text-sm font-semibold mb-1.5">{selectedVariant.type}: <span className="text-[var(--muted)] font-normal">{selectedVariant.label}</span></div>
-              {isColorVariantType(selectedVariant.type) ? (
-                <div className="flex flex-wrap gap-2.5">
-                  {product.variants.map((v,i)=> (
-                    <button key={v.id} aria-label={v.label} title={v.label} onClick={()=>{ setVariantIdx(i); setQty(1); }}
-                      disabled={v.stock<=0}
-                      className={"w-9 h-9 rounded-full border-2 transition-all focus-ring flex items-center justify-center "+(i===variantIdx?'border-[var(--purple)] scale-110':'border-transparent hover:scale-105')+(v.stock<=0?' opacity-30 cursor-not-allowed':'')}
-                      style={{boxShadow: i===variantIdx ? '0 0 0 2px #fff, 0 0 0 3.5px var(--purple)' : '0 0 0 1px rgba(0,0,0,0.12)'}}>
-                      <span className="w-7 h-7 rounded-full" style={{background: colorNameToHex(v.label) || '#d1d5db'}}></span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {product.variants.map((v,i)=> (
-                    <button key={v.id} aria-label={v.label} onClick={()=>{ setVariantIdx(i); setQty(1); }}
-                      disabled={v.stock<=0}
-                      className={"px-3 py-1.5 rounded-xl border-2 text-xs font-semibold transition-all focus-ring flex items-center gap-1.5 "+
-                        (i===variantIdx ? 'border-[var(--purple)] bg-[var(--purple-light)] text-[var(--purple)]' : 'border-[var(--line)] hover:border-[var(--purple)]')+
-                        (v.stock<=0 ? ' opacity-40 cursor-not-allowed line-through' : '')}>
-                      {v.image && <img src={v.image} className="w-5 h-5 rounded-full object-cover" />}
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {effectiveStock<=0 && <div className="text-xs text-[var(--danger)] mt-1.5">This option is out of stock</div>}
+              <div className="text-sm font-semibold mb-1.5">Colour: <span className="text-[var(--muted)] font-normal">{selectedVariant.label}</span></div>
+              <div className="flex gap-2.5">
+                {product.variants.map((v,i)=> (
+                  <button key={v.id} aria-label={v.label} onClick={()=>setVariantIdx(i)}
+                    className={"w-8 h-8 rounded-full border-2 transition-all focus-ring flex items-center justify-center "+(i===variantIdx?'border-[var(--purple)] scale-110':'border-transparent hover:scale-105')}
+                    style={{boxShadow: i===variantIdx ? '0 0 0 2px #fff, 0 0 0 3.5px var(--purple)' : '0 0 0 1px rgba(0,0,0,0.08)'}}>
+                    <span className="w-6 h-6 rounded-full" style={{background:v.color}}></span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -2205,7 +2126,7 @@ function ProductPage({route}){
             </div>
           )}
 
-          <div key={(line?'incart':'initial')+(selectedVariant?selectedVariant.id:'')} className="flex gap-3 mt-5 items-center fade-in">
+          <div key={line?'incart':'initial'} className="flex gap-3 mt-5 items-center fade-in">
             {line ? (
               <React.Fragment>
                 <div className="flex-shrink-0"><QuantitySelector qty={line.qty} onChange={onQtyChange} /></div>
@@ -2214,8 +2135,8 @@ function ProductPage({route}){
               </React.Fragment>
             ) : (
               <React.Fragment>
-                <button disabled={effectiveStock<=0} onClick={()=>{ addToCart(product.id, qty, selectedVariant?selectedVariant.id:null); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring disabled:opacity-40">🛒 Add to Cart</button>
-                <button disabled={effectiveStock<=0} onClick={()=>{ addToCart(product.id, qty, selectedVariant?selectedVariant.id:null); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring disabled:opacity-40">Buy Now</button>
+                <button onClick={()=>{ addToCart(product.id, qty); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
+                <button onClick={()=>{ addToCart(product.id, qty); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
               </React.Fragment>
             )}
           </div>
@@ -2327,16 +2248,15 @@ function CartPage(){
           <FreeDeliveryBar />
           <div className="flex flex-col gap-3">
             {cartLines.map(line=> (
-              <div key={line.id+'::'+(line.variantId||'')} className="card p-3 flex gap-3 items-center">
+              <div key={line.id} className="card p-3 flex gap-3 items-center">
                 <a href={"#/product/"+line.id}><ProductImg product={line.product} className="w-16 h-16 text-2xl flex-shrink-0" /></a>
                 <div className="flex-1 min-w-0">
                   <a href={"#/product/"+line.id} className="text-sm font-semibold line-clamp-2">{line.product.name}</a>
-                  {line.variant && <div className="text-xs text-[var(--muted)] mt-0.5">{line.variant.type}: {line.variant.label}</div>}
-                  <div className="text-sm font-bold mt-1">{inr(line.price)}</div>
+                  <div className="text-sm font-bold mt-1">{inr(line.product.price)}</div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <button onClick={()=>removeFromCart(line.id, line.variantId)} aria-label="Remove item" className="text-[var(--danger)] text-sm focus-ring">🗑️</button>
-                  <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(line.id,q,line.variantId)} small />
+                  <button onClick={()=>removeFromCart(line.id)} aria-label="Remove item" className="text-[var(--danger)] text-sm focus-ring">🗑️</button>
+                  <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(line.id,q)} small />
                 </div>
               </div>
             ))}
@@ -2716,14 +2636,13 @@ function CheckoutConfirmPage(){
             <div className="font-bold text-sm mb-3">Order Items ({cartLines.length})</div>
             <div className="flex flex-col gap-3">
               {cartLines.map(line=> (
-                <div key={line.id+'::'+(line.variantId||'')} className="flex items-center gap-3">
+                <div key={line.id} className="flex items-center gap-3">
                   <ProductImg product={line.product} className="w-12 h-12 text-xl flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold line-clamp-1">{line.product.name}</div>
-                    {line.variant && <div className="text-[11px] text-[var(--muted)]">{line.variant.type}: {line.variant.label}</div>}
-                    <div className="text-xs text-[var(--muted)]">{inr(line.price)} x {line.qty}</div>
+                    <div className="text-xs text-[var(--muted)]">{inr(line.product.price)} x {line.qty}</div>
                   </div>
-                  <div className="text-sm font-bold">{inr(line.price*line.qty)}</div>
+                  <div className="text-sm font-bold">{inr(line.product.price*line.qty)}</div>
                 </div>
               ))}
             </div>
