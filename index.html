@@ -1001,11 +1001,11 @@ function QuantitySelector({qty, onChange, small}){
   );
 }
 
-function ProductImg({product, className, iconClass, fit='cover'}){
+function ProductImg({product, className, iconClass}){
   if(product.image){
     return (
       <div className={"placeholder-img overflow-hidden "+className} style={{background:product.bg}}>
-        <img src={product.image} alt={product.name} className={"w-full h-full relative z-[1] "+(fit==='contain' ? 'object-contain' : 'object-cover')} />
+        <img src={product.image} alt={product.name} className="w-full h-full object-cover relative z-[1]" />
       </div>
     );
   }
@@ -1016,7 +1016,7 @@ function ProductImg({product, className, iconClass, fit='cover'}){
   );
 }
 
-function ProductCard({product, size='sm', fill=false}){
+function ProductCard({product}){
   const {cart, addToCart, setCartQty, wishlist, toggleWishlist} = useApp();
   const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
@@ -1025,38 +1025,32 @@ function ProductCard({product, size='sm', fill=false}){
     addToCart(product.id,1);
     navigate('#/checkout/address');
   };
-  // `fill` is set only inside a bento grid, where EVERY tile — small ones included — must respect
-  // whatever fixed-height cell the grid gave it (h-full, image stretched with object-cover) rather
-  // than sizing itself off its own content (the old aspect-square image + natural text height).
-  // Mixing a fixed-height grid with content that ignores that height is what caused cards to
-  // overflow their cell and visually overlap the row below — every tile now defers to the grid.
-  // Everywhere else (`fill` unset — plain grids, horizontal shelves) keeps the original sizing.
   return (
-    <div className={"card p-2.5 flex flex-col relative group"+(fill?' h-full overflow-hidden':'')}>
+    <div className="card p-2.5 flex flex-col relative group">
       <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
         className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
         <span key={isWished} className={"pop inline-block "+(isWished ? 'text-[var(--danger)]' : 'text-gray-300')}><Icon.Heart active={isWished} /></span>
       </button>
-      <div className={"relative "+(fill ? 'flex-1 min-h-0 mb-2' : '')}>
-        <a href={"#/product/"+product.id} className={fill ? "block h-full" : "block"}>
-          <ProductImg product={product} fit={fill?'contain':'cover'} className={fill ? "w-full h-full text-4xl" : "w-full aspect-square text-4xl mb-2"} />
+      <div className="relative">
+        <a href={"#/product/"+product.id} className="block">
+          <ProductImg product={product} className="w-full aspect-square text-4xl mb-2" />
           {product.tags.includes('bestseller') && <div className="absolute top-3 left-3"><Badge tone="amber">Bestseller</Badge></div>}
         </a>
       </div>
-      <a href={"#/product/"+product.id} className="block flex-shrink-0">
-        <div className={"font-semibold leading-snug line-clamp-2 "+(size==='lg' ? 'text-[15px] min-h-[38px] mt-1.5' : 'text-[13px] min-h-[34px]')}>{product.name}</div>
+      <a href={"#/product/"+product.id} className="block">
+        <div className="text-[13px] font-semibold leading-snug line-clamp-2 min-h-[34px]">{product.name}</div>
       </a>
       {product.variants && (
-        <div className="flex gap-1 mt-1 flex-shrink-0">
+        <div className="flex gap-1 mt-1">
           {product.variants.slice(0,4).map(v=> <span key={v.id} className="w-3.5 h-3.5 rounded-full border border-black/10" style={{background:v.color}}></span>)}
         </div>
       )}
-      <div className="flex items-baseline gap-1.5 mt-1 flex-shrink-0">
-        <span className={"font-bold "+(size==='lg' ? 'text-[17px]' : 'text-[15px]')}>{inr(product.price)}</span>
+      <div className="flex items-baseline gap-1.5 mt-1">
+        <span className="font-bold text-[15px]">{inr(product.price)}</span>
         {product.discount>0 && <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>}
         {product.discount>0 && <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>}
       </div>
-      <div className="mt-2 flex gap-1.5 items-center flex-shrink-0">
+      <div className="mt-2 flex gap-1.5 items-center">
         <div className="flex-1">
           {!line ? (
             <button onClick={()=>addToCart(product.id,1)}
@@ -1072,25 +1066,6 @@ function ProductCard({product, size='sm', fill=false}){
           <Icon.Bolt />
         </button>
       </div>
-    </div>
-  );
-}
-
-// Repeating tile-size rhythm for the homepage's bento grids — mostly small tiles, with an
-// occasional large "hero" (2 cols x 2 rows) and wide "banner" (2 cols x 1 row) tile breaking up the
-// pattern, the way Amazon/Flipkart mix sizes instead of a flat uniform grid. Homepage only —
-// category pages, search, and the horizontal-scroll shelves are untouched. Every tile is rendered
-// with `fill` so it strictly respects the grid's fixed row height (see ProductCard) — this is what
-// keeps tiles from overflowing their cell and overlapping the row below.
-const BENTO_PATTERN = ['lg','sm','sm','wide','sm','sm','sm','lg','sm','wide','sm','sm'];
-function BentoProductGrid({products, keySuffix=false}){
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 auto-rows-[260px] md:auto-rows-[280px]">
-      {products.map((p,i)=>{
-        const size = BENTO_PATTERN[i % BENTO_PATTERN.length];
-        const span = size==='lg' ? 'col-span-2 row-span-2' : size==='wide' ? 'col-span-2 row-span-1' : 'col-span-1 row-span-1';
-        return <div key={keySuffix ? p.id+'-'+i : p.id} className={span}><ProductCard product={p} size={size} fill /></div>;
-      })}
     </div>
   );
 }
@@ -1781,7 +1756,7 @@ function ExploreMoreFeed({products}){
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-display font-bold text-lg">Just For You 💜</h2>
       </div>
-      <BentoProductGrid products={visible} />
+      <ProductGrid products={visible} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
       {hasMore && (
         <div className="flex justify-center mt-5">
           <button onClick={()=>setVisibleCount(v=>Math.min(v+BATCH, order.length))}
@@ -1832,7 +1807,7 @@ function HomePage(){
         {productsLoading ? (
           <ProductGridSkeleton count={5} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
         ) : (
-          <BentoProductGrid products={popular} />
+          <ProductGrid products={popular} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
         )}
       </div>
 
