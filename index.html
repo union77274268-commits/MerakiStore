@@ -1734,6 +1734,57 @@ function ExitIntentGuard(){
   );
 }
 
+function shuffleArray(arr){
+  const a = [...arr];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+// A genuinely endless feed: once it's shown every product, it reshuffles and loops back through
+// them again rather than stopping, so scrolling never actually runs out of content. Real product
+// ids are kept (needed for cart/wishlist to work) — a per-slot key keeps React happy about the
+// same product appearing more than once across loops.
+function InfiniteProductFeed({products}){
+  const BATCH = 12;
+  const [order, setOrder] = useState(()=> shuffleArray(products));
+  const [visibleCount, setVisibleCount] = useState(BATCH);
+  const sentinelRef = useRef(null);
+  const loadingRef = useRef(false);
+
+  useEffect(()=>{ setOrder(shuffleArray(products)); setVisibleCount(BATCH); }, [products.length]);
+
+  useEffect(()=>{
+    const el = sentinelRef.current;
+    if(!el || !order.length) return;
+    const obs = new IntersectionObserver((entries)=>{
+      if(!entries[0].isIntersecting || loadingRef.current) return;
+      loadingRef.current = true;
+      setTimeout(()=>{ setVisibleCount(v=>v+BATCH); loadingRef.current = false; }, 200);
+    }, { rootMargin: '900px' });
+    obs.observe(el);
+    return ()=>obs.disconnect();
+  },[order.length]);
+
+  if(!order.length) return null;
+  const visible = Array.from({length:visibleCount}, (_,i)=> order[i % order.length]);
+
+  return (
+    <div className="px-4 md:container-max md:mx-auto mt-8">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-display font-bold text-lg">Just For You 💜</h2>
+        <span className="text-xs text-[var(--muted)] hidden sm:inline">Keep scrolling for more</span>
+      </div>
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+        {visible.map((p,i)=> <ProductCard key={p.id+'-'+i} product={p} />)}
+      </div>
+      <div ref={sentinelRef} className="py-8 flex items-center justify-center gap-2 text-xs text-[var(--muted)]">
+        <span className="inline-block w-4 h-4 border-2 border-[var(--purple)] border-t-transparent rounded-full animate-spin"></span>
+        Loading more
+      </div>
+    </div>
+  );
+}
+
 function HomePage(){
   const {wishlist, toggleWishlist, products, productsLoading, banners, categories} = useApp();
   const popular = products.filter(p=>p.tags.includes('bestseller'));
@@ -1776,21 +1827,21 @@ function HomePage(){
         )}
       </div>
 
-      <div className="mobile-only">
-        <ProductRow title="New Arrivals 🆕" subtitle="Fresh on the shelves" products={newArrivals} />
-        <ProductRow title="Trending Now 📈" subtitle="What everyone's adding to cart" products={trending} />
-        <ProductRow title="Stationery Picks ✏️" products={stationeryPicks} viewAllHref="#/category/stationery" />
-        <ProductRow title="Toys We Love 🧸" products={toysPicks} viewAllHref="#/category/toys" />
-        <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/notebooks-diaries" />
-        <ProductRow title="Frequently Bought Together" subtitle="A handy combo to grab in one go" products={boughtTogether} />
-        <ProductRow title="Recommended For You 💜" products={recommended} />
-      </div>
+      <ProductRow title="New Arrivals 🆕" subtitle="Fresh on the shelves" products={newArrivals} />
+      <ProductRow title="Trending Now 📈" subtitle="What everyone's adding to cart" products={trending} />
+      <ProductRow title="Stationery Picks ✏️" products={stationeryPicks} viewAllHref="#/category/stationery" />
+      <ProductRow title="Toys We Love 🧸" products={toysPicks} viewAllHref="#/category/toys" />
+      <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/notebooks-diaries" />
+      <ProductRow title="Frequently Bought Together" subtitle="A handy combo to grab in one go" products={boughtTogether} />
+      <ProductRow title="Recommended For You 💜" products={recommended} />
 
       <div className="px-4 md:container-max md:mx-auto mt-8 grid grid-cols-3 gap-2 text-center text-[11px] md:text-sm">
         <div className="card p-3"><div className="text-xl">🚚</div><div className="font-bold mt-1">Fast Delivery</div><div className="text-[var(--muted)]">Within 2-4 hrs</div></div>
         <div className="card p-3"><div className="text-xl">🆓</div><div className="font-bold mt-1">Free Delivery</div><div className="text-[var(--muted)]">Above ₹299</div></div>
         <div className="card p-3"><div className="text-xl">🛡️</div><div className="font-bold mt-1">Safe Packaging</div><div className="text-[var(--muted)]">Carefully sealed</div></div>
       </div>
+
+      {!productsLoading && <InfiniteProductFeed products={products} />}
 
       <Footer />
     </div>
