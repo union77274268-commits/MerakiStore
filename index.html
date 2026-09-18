@@ -1001,11 +1001,11 @@ function QuantitySelector({qty, onChange, small}){
   );
 }
 
-function ProductImg({product, className, iconClass}){
+function ProductImg({product, className, iconClass, fit='cover'}){
   if(product.image){
     return (
       <div className={"placeholder-img overflow-hidden "+className} style={{background:product.bg}}>
-        <img src={product.image} alt={product.name} className="w-full h-full object-cover relative z-[1]" />
+        <img src={product.image} alt={product.name} className={"w-full h-full relative z-[1] "+(fit==='contain' ? 'object-contain' : 'object-cover')} />
       </div>
     );
   }
@@ -1016,7 +1016,7 @@ function ProductImg({product, className, iconClass}){
   );
 }
 
-function ProductCard({product}){
+function ProductCard({product, size='sm', fill=false}){
   const {cart, addToCart, setCartQty, wishlist, toggleWishlist} = useApp();
   const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
@@ -1025,32 +1025,38 @@ function ProductCard({product}){
     addToCart(product.id,1);
     navigate('#/checkout/address');
   };
+  // `fill` is set only inside a bento grid, where EVERY tile — small ones included — must respect
+  // whatever fixed-height cell the grid gave it (h-full, image stretched with object-cover) rather
+  // than sizing itself off its own content (the old aspect-square image + natural text height).
+  // Mixing a fixed-height grid with content that ignores that height is what caused cards to
+  // overflow their cell and visually overlap the row below — every tile now defers to the grid.
+  // Everywhere else (`fill` unset — plain grids, horizontal shelves) keeps the original sizing.
   return (
-    <div className="card p-2.5 flex flex-col relative group">
+    <div className={"card p-2.5 flex flex-col relative group"+(fill?' h-full overflow-hidden':'')}>
       <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
         className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
         <span key={isWished} className={"pop inline-block "+(isWished ? 'text-[var(--danger)]' : 'text-gray-300')}><Icon.Heart active={isWished} /></span>
       </button>
-      <div className="relative">
-        <a href={"#/product/"+product.id} className="block">
-          <ProductImg product={product} className="w-full aspect-square text-4xl mb-2" />
+      <div className={"relative "+(fill ? 'flex-1 min-h-0 mb-2' : '')}>
+        <a href={"#/product/"+product.id} className={fill ? "block h-full" : "block"}>
+          <ProductImg product={product} fit={fill?'contain':'cover'} className={fill ? "w-full h-full text-4xl" : "w-full aspect-square text-4xl mb-2"} />
           {product.tags.includes('bestseller') && <div className="absolute top-3 left-3"><Badge tone="amber">Bestseller</Badge></div>}
         </a>
       </div>
-      <a href={"#/product/"+product.id} className="block">
-        <div className="text-[13px] font-semibold leading-snug line-clamp-2 min-h-[34px]">{product.name}</div>
+      <a href={"#/product/"+product.id} className="block flex-shrink-0">
+        <div className={"font-semibold leading-snug line-clamp-2 "+(size==='lg' ? 'text-[15px] min-h-[38px] mt-1.5' : 'text-[13px] min-h-[34px]')}>{product.name}</div>
       </a>
       {product.variants && (
-        <div className="flex gap-1 mt-1">
+        <div className="flex gap-1 mt-1 flex-shrink-0">
           {product.variants.slice(0,4).map(v=> <span key={v.id} className="w-3.5 h-3.5 rounded-full border border-black/10" style={{background:v.color}}></span>)}
         </div>
       )}
-      <div className="flex items-baseline gap-1.5 mt-1">
-        <span className="font-bold text-[15px]">{inr(product.price)}</span>
+      <div className="flex items-baseline gap-1.5 mt-1 flex-shrink-0">
+        <span className={"font-bold "+(size==='lg' ? 'text-[17px]' : 'text-[15px]')}>{inr(product.price)}</span>
         {product.discount>0 && <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>}
         {product.discount>0 && <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>}
       </div>
-      <div className="mt-2 flex gap-1.5 items-center">
+      <div className="mt-2 flex gap-1.5 items-center flex-shrink-0">
         <div className="flex-1">
           {!line ? (
             <button onClick={()=>addToCart(product.id,1)}
@@ -1066,6 +1072,25 @@ function ProductCard({product}){
           <Icon.Bolt />
         </button>
       </div>
+    </div>
+  );
+}
+
+// Repeating tile-size rhythm for the homepage's bento grids — mostly small tiles, with an
+// occasional large "hero" (2 cols x 2 rows) and wide "banner" (2 cols x 1 row) tile breaking up the
+// pattern, the way Amazon/Flipkart mix sizes instead of a flat uniform grid. Homepage only —
+// category pages, search, and the horizontal-scroll shelves are untouched. Every tile is rendered
+// with `fill` so it strictly respects the grid's fixed row height (see ProductCard) — this is what
+// keeps tiles from overflowing their cell and overlapping the row below.
+const BENTO_PATTERN = ['lg','sm','sm','wide','sm','sm','sm','lg','sm','wide','sm','sm'];
+function BentoProductGrid({products, keySuffix=false}){
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 auto-rows-[260px] md:auto-rows-[280px]">
+      {products.map((p,i)=>{
+        const size = BENTO_PATTERN[i % BENTO_PATTERN.length];
+        const span = size==='lg' ? 'col-span-2 row-span-2' : size==='wide' ? 'col-span-2 row-span-1' : 'col-span-1 row-span-1';
+        return <div key={keySuffix ? p.id+'-'+i : p.id} className={span}><ProductCard product={p} size={size} fill /></div>;
+      })}
     </div>
   );
 }
@@ -1740,47 +1765,31 @@ function shuffleArray(arr){
   return a;
 }
 
-// A genuinely endless feed: once it's shown every product, it reshuffles and loops back through
-// them again rather than stopping, so scrolling never actually runs out of content. Real product
-// ids are kept (needed for cart/wishlist to work) — a per-slot key keeps React happy about the
-// same product appearing more than once across loops.
-function InfiniteProductFeed({products}){
+// Shows products in batches with an explicit "Load more" button — capped at the catalog size
+// rather than looping forever, so the person decides when (and whether) to keep going.
+function ExploreMoreFeed({products}){
   const BATCH = 12;
-  const [order, setOrder] = useState(()=> shuffleArray(products));
+  const [order] = useState(()=> shuffleArray(products));
   const [visibleCount, setVisibleCount] = useState(BATCH);
-  const sentinelRef = useRef(null);
-  const loadingRef = useRef(false);
-
-  useEffect(()=>{ setOrder(shuffleArray(products)); setVisibleCount(BATCH); }, [products.length]);
-
-  useEffect(()=>{
-    const el = sentinelRef.current;
-    if(!el || !order.length) return;
-    const obs = new IntersectionObserver((entries)=>{
-      if(!entries[0].isIntersecting || loadingRef.current) return;
-      loadingRef.current = true;
-      setTimeout(()=>{ setVisibleCount(v=>v+BATCH); loadingRef.current = false; }, 200);
-    }, { rootMargin: '900px' });
-    obs.observe(el);
-    return ()=>obs.disconnect();
-  },[order.length]);
 
   if(!order.length) return null;
-  const visible = Array.from({length:visibleCount}, (_,i)=> order[i % order.length]);
+  const visible = order.slice(0, visibleCount);
+  const hasMore = visibleCount < order.length;
 
   return (
     <div className="px-4 md:container-max md:mx-auto mt-8">
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-display font-bold text-lg">Just For You 💜</h2>
-        <span className="text-xs text-[var(--muted)] hidden sm:inline">Keep scrolling for more</span>
       </div>
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-        {visible.map((p,i)=> <ProductCard key={p.id+'-'+i} product={p} />)}
-      </div>
-      <div ref={sentinelRef} className="py-8 flex items-center justify-center gap-2 text-xs text-[var(--muted)]">
-        <span className="inline-block w-4 h-4 border-2 border-[var(--purple)] border-t-transparent rounded-full animate-spin"></span>
-        Loading more
-      </div>
+      <BentoProductGrid products={visible} />
+      {hasMore && (
+        <div className="flex justify-center mt-5">
+          <button onClick={()=>setVisibleCount(v=>Math.min(v+BATCH, order.length))}
+            className="btn-secondary px-8 py-2.5 text-sm font-semibold focus-ring">
+            Load More
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1823,7 +1832,7 @@ function HomePage(){
         {productsLoading ? (
           <ProductGridSkeleton count={5} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
         ) : (
-          <ProductGrid products={popular} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-5" />
+          <BentoProductGrid products={popular} />
         )}
       </div>
 
@@ -1841,7 +1850,7 @@ function HomePage(){
         <div className="card p-3"><div className="text-xl">🛡️</div><div className="font-bold mt-1">Safe Packaging</div><div className="text-[var(--muted)]">Carefully sealed</div></div>
       </div>
 
-      {!productsLoading && <InfiniteProductFeed products={products} />}
+      {!productsLoading && <ExploreMoreFeed products={products} />}
 
       <Footer />
     </div>
