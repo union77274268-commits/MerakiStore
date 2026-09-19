@@ -3703,13 +3703,17 @@ function AdminShell({route, onExit}){
       </div>
 
       <div className="flex-1 min-w-0">
-        {/* Mobile top bar */}
-        <div className="mobile-only sticky top-0 z-40 bg-white border-b border-[var(--line)] flex items-center gap-2 px-3 py-2">
-          <a href="#/home" aria-label="View storefront" className="w-8 h-8 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Store /></a>
-          <button onClick={onExit} aria-label="Log out" className="w-8 h-8 rounded-full hover:bg-red-50 flex items-center justify-center focus-ring text-[var(--danger)] flex-shrink-0"><Icon.Logout /></button>
-          <div className="flex-1 min-w-0 pl-1">
-            <div className="font-display font-bold text-base leading-none truncate">{sectionLabel}</div>
-            <div className="text-[10px] font-bold text-[var(--purple)] mt-0.5">SHOP ADMIN</div>
+        {/* Mobile top bar — `mobile-only` and `flex` kept on separate elements: both set the CSS
+            `display` property, and having them on the same element let one clobber the other
+            (mobile-only's display:block was winning over flex, collapsing the row into a stack). */}
+        <div className="mobile-only sticky top-0 z-40 bg-white border-b border-[var(--line)]">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <a href="#/home" aria-label="View storefront" className="w-8 h-8 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring text-[var(--ink)] flex-shrink-0"><Icon.Store /></a>
+            <button onClick={onExit} aria-label="Log out" className="w-8 h-8 rounded-full hover:bg-red-50 flex items-center justify-center focus-ring text-[var(--danger)] flex-shrink-0"><Icon.Logout /></button>
+            <div className="flex-1 min-w-0 pl-1">
+              <div className="font-display font-bold text-base leading-none truncate">{sectionLabel}</div>
+              <div className="text-[10px] font-bold text-[var(--purple)] mt-0.5">SHOP ADMIN</div>
+            </div>
           </div>
         </div>
         <div className="desktop-only sticky top-0 z-30 bg-white border-b border-[var(--line)] px-8 py-4">
