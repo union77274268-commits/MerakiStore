@@ -5,6 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#ffffff" id="themeColorMeta" />
 <title>Meraki — Stationery & Toys</title>
+<script>
+  // Some mobile browsers' "Desktop site" mode forces a wide layout viewport, which makes our
+  // `min-width:900px` breakpoint fire even on an actual phone — that's what shows the desktop
+  // sidebar squeezed onto a phone screen, tiny and cramped. window.screen.width/height reflect the
+  // real device size and aren't affected by that mode, so we use them as a second, more reliable
+  // check and force mobile layout via this class regardless of what the browser is pretending the
+  // viewport is.
+  (function(){
+    var w = Math.min(window.screen.width||9999, window.screen.height||9999);
+    if(w < 480) document.documentElement.classList.add('force-mobile-layout');
+  })();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -122,6 +134,8 @@
     .desktop-only{display:block;}
     .mobile-only{display:none;}
   }
+  html.force-mobile-layout .desktop-only{display:none !important;}
+  html.force-mobile-layout .mobile-only{display:block !important;}
   .focus-ring:focus-visible{outline:3px solid var(--amber);outline-offset:2px;}
   a{text-decoration:none;color:inherit;}
   input,select,textarea{border-radius:14px !important;}
