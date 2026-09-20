@@ -118,6 +118,15 @@
   @keyframes riseIn{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
   .pop{animation:pop .4s cubic-bezier(.34,1.56,.64,1);}
   @keyframes pop{0%{transform:scale(.5);opacity:0;}70%{transform:scale(1.08);}100%{transform:scale(1);opacity:1;}}
+  @keyframes dealsMarquee{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+  .deals-marquee-track{width:max-content;animation:dealsMarquee 22s linear infinite;}
+  .deals-marquee-track:hover,.deals-marquee-track:active{animation-play-state:paused;}
+  .reveal-on-scroll{opacity:0;transform:translateY(16px);transition:opacity .5s ease, transform .5s ease;}
+  .reveal-on-scroll.revealed{opacity:1;transform:translateY(0);}
+  @media (prefers-reduced-motion: reduce){
+    .deals-marquee-track{animation:none;}
+    .reveal-on-scroll{opacity:1;transform:none;transition:none;}
+  }
   .placeholder-img{
     display:flex;align-items:center;justify-content:center;
     font-size:2.4rem; border-radius:20px; position:relative; overflow:hidden;
@@ -289,6 +298,10 @@ const DEFAULT_STORE_SETTINGS = {
 function mapDbProduct(row){
   const slug = slugify(row.category);
   const meta = getCategoryMeta(row.category);
+  const price = Number(row.price);
+  const rawMrp = row.mrp!=null ? Number(row.mrp) : price;
+  const mrp = rawMrp > price ? rawMrp : price; // only a real, admin-set MRP counts as a discount
+  const discount = mrp > price ? Math.round((1 - price/mrp)*100) : 0;
   return {
     id: row.id,
     name: row.name,
@@ -296,9 +309,9 @@ function mapDbProduct(row){
     categoryLabel: row.category,
     sub: row.brand || 'General',
     brand: row.brand || 'Generic',
-    price: Number(row.price),
-    mrp: Number(row.price),
-    discount: 0,
+    price,
+    mrp,
+    discount,
     rating: 0,
     reviews: 0,
     stock: row.stock,
@@ -644,27 +657,38 @@ function AppProvider({children}){
     return ()=> sb.removeChannel(channel);
   },[session, fetchOrders, fetchCart, fetchWishlist, fetchProfile]);
 
+  // Cart quantities are clamped to each product's known stock (never more than what's actually in
+  // inventory) — this is a client-side check using the last-synced stock number, so it's not
+  // perfectly atomic against another customer buying the last unit at the exact same moment; the
+  // real backstop is the fresh stock re-check placeOrder does right before creating the order.
   const addToCart = useCallback((id, qty=1)=>{
+    const product = productMap[id];
+    const stock = product ? product.stock : 20;
+    if(stock<=0){ showToast("That's out of stock right now", '⚠️'); return; }
     let finalQty = qty;
+    let hitLimit = false;
     setCart(prev=>{
       const existing = prev.find(c=>c.id===id);
-      finalQty = existing ? clamp(existing.qty+qty,1,20) : clamp(qty,1,20);
-      if(existing){
-        return prev.map(c=> c.id===id ? {...c, qty: finalQty} : c);
-      }
+      const desired = existing ? existing.qty+qty : qty;
+      finalQty = clamp(desired, 1, Math.min(20, stock));
+      hitLimit = desired > finalQty;
+      if(existing) return prev.map(c=> c.id===id ? {...c, qty: finalQty} : c);
       return [...prev, {id, qty: finalQty}];
     });
-    showToast('Added to cart', '🛒');
+    showToast(hitLimit ? `Only ${stock} in stock — added what's available` : 'Added to cart', hitLimit ? '⚠️' : '🛒');
     if(session){
       sb.from('customer_cart_items').upsert(
         { customer_id: session.user.id, product_id: id, quantity: finalQty },
         { onConflict: 'customer_id,product_id' }
       ).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
     }
-  },[session, showToast]);
+  },[session, showToast, productMap]);
 
   const setCartQty = useCallback((id, qty)=>{
-    const clamped = clamp(qty,0,20);
+    const product = productMap[id];
+    const stock = product ? Math.max(product.stock,0) : 20;
+    const clamped = clamp(qty, 0, Math.min(20, stock));
+    if(qty > clamped) showToast(`Only ${stock} in stock`, '⚠️');
     setCart(prev=>{
       if(clamped<=0) return prev.filter(c=>c.id!==id);
       return prev.map(c=> c.id===id ? {...c, qty: clamped} : c);
@@ -679,7 +703,7 @@ function AppProvider({children}){
         { onConflict: 'customer_id,product_id' }
       ).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
     }
-  },[session]);
+  },[session, productMap, showToast]);
 
   const removeFromCart = useCallback((id)=>{
     setCart(prev=> prev.filter(c=>c.id!==id));
@@ -732,6 +756,26 @@ function AppProvider({children}){
 
   const placeOrder = useCallback(async ()=>{
     if(!session) return { error: new Error('Not logged in') };
+    if(!cartLines.length) return { error: new Error('Your cart is empty') };
+
+    // Final stock check right before the order is created — this is the real backstop against two
+    // customers (or an in-store POS sale) taking the last unit of something at nearly the same
+    // time; the cart-side clamping earlier is only as fresh as the last product sync.
+    const ids = cartLines.map(c=>c.id);
+    const { data: freshRows, error: stockErr } = await sb.from('storefront_products').select('id, stock').in('id', ids);
+    if(stockErr){ showToast('Could not verify stock — please try again','⚠️'); return { error: stockErr }; }
+    const freshStock = {}; (freshRows||[]).forEach(r=>{ freshStock[r.id]=r.stock; });
+    const shortages = cartLines.filter(c=> (freshStock[c.id] ?? 0) < c.qty);
+    if(shortages.length){
+      shortages.forEach(c=>{
+        const avail = freshStock[c.id] || 0;
+        if(avail<=0) removeFromCart(c.id); else setCartQty(c.id, avail);
+      });
+      const names = shortages.map(c=>c.product.name).join(', ');
+      showToast(`Stock just changed for: ${names} — please review your cart`, '⚠️');
+      return { error: new Error('stock_changed') };
+    }
+
     const needsVerification = paymentMethod==='upi' || paymentMethod==='upiApps';
     const paymentLabel = paymentMethod==='upiApps' && upiAppChoice ? upiAppChoice.label : PAYMENT_LABELS[paymentMethod] || paymentMethod;
 
@@ -775,7 +819,7 @@ function AppProvider({children}){
     sb.from('customer_cart_items').delete().eq('customer_id', session.user.id)
       .then(({error})=>{ if(error) console.error('Failed to clear cart after order', error); });
     return { order: fullOrder };
-  },[session, cartLines, subtotal, deliveryCharge, packagingCharge, total, deliveryType, paymentMethod, upiAppChoice, address, productMap, setCart, setUpiAppChoice, fetchOrders, showToast]);
+  },[session, cartLines, subtotal, deliveryCharge, packagingCharge, total, deliveryType, paymentMethod, upiAppChoice, address, productMap, setCart, setCartQty, removeFromCart, setUpiAppChoice, fetchOrders, showToast]);
 
   const verifyOrderPayment = useCallback(async (orderId)=>{
     setOrders(prev=> prev.map(o=> o.id===orderId ? {...o, paymentVerified:true} : o));
@@ -1010,14 +1054,15 @@ function Badge({children, tone='purple'}){
   return <span className={"px-2 py-0.5 rounded-full text-[11px] font-bold "+tones[tone]}>{children}</span>;
 }
 
-function QuantitySelector({qty, onChange, small}){
+function QuantitySelector({qty, onChange, small, max}){
+  const atMax = max!=null && qty>=max;
   return (
     <div className={"inline-flex items-center border border-[var(--line)] rounded-lg overflow-hidden bg-white "+(small?'h-8':'h-9')}>
       <button aria-label="Decrease quantity" onClick={()=>onChange(qty-1)}
         className="w-8 h-full flex items-center justify-center text-[var(--purple)] font-bold hover:bg-[var(--purple-light)] focus-ring">−</button>
       <span className="w-7 text-center text-sm font-bold">{qty}</span>
-      <button aria-label="Increase quantity" onClick={()=>onChange(qty+1)}
-        className="w-8 h-full flex items-center justify-center text-[var(--purple)] font-bold hover:bg-[var(--purple-light)] focus-ring">+</button>
+      <button aria-label="Increase quantity" disabled={atMax} onClick={()=>onChange(qty+1)}
+        className={"w-8 h-full flex items-center justify-center font-bold focus-ring "+(atMax ? 'text-gray-300 cursor-not-allowed' : 'text-[var(--purple)] hover:bg-[var(--purple-light)]')}>+</button>
     </div>
   );
 }
@@ -1055,7 +1100,10 @@ function ProductCard({product}){
       <div className="relative">
         <a href={"#/product/"+product.id} className="block">
           <ProductImg product={product} className="w-full aspect-square text-4xl mb-2" />
-          {product.tags.includes('bestseller') && <div className="absolute top-3 left-3"><Badge tone="amber">Bestseller</Badge></div>}
+          <div className="absolute top-3 left-3 flex flex-col gap-1 items-start">
+            {product.tags.includes('bestseller') && <Badge tone="amber">Bestseller</Badge>}
+            {product.stock>0 && product.stock<=5 && <Badge tone="danger">Only {product.stock} left</Badge>}
+          </div>
         </a>
       </div>
       <a href={"#/product/"+product.id} className="block">
@@ -1073,17 +1121,19 @@ function ProductCard({product}){
       </div>
       <div className="mt-2 flex gap-1.5 items-center">
         <div className="flex-1">
-          {!line ? (
+          {product.stock<=0 ? (
+            <button disabled className="w-full py-1.5 text-sm rounded-lg bg-gray-100 text-gray-400 font-semibold cursor-not-allowed">Out of Stock</button>
+          ) : !line ? (
             <button onClick={()=>addToCart(product.id,1)}
               className="btn-primary w-full py-1.5 text-sm flex items-center justify-center gap-1 focus-ring">
               <span>+</span> Add
             </button>
           ) : (
-            <div className="w-full flex justify-center"><QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} small /></div>
+            <div className="w-full flex justify-center"><QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} max={product.stock} small /></div>
           )}
         </div>
-        <button aria-label="Quick buy" onClick={quickBuy} title="Quick Buy"
-          className="w-8 h-8 flex-shrink-0 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring hover:bg-[var(--purple)] hover:text-white transition-colors">
+        <button aria-label="Quick buy" onClick={quickBuy} title="Quick Buy" disabled={product.stock<=0}
+          className={"w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center focus-ring transition-colors "+(product.stock<=0 ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[var(--purple-light)] text-[var(--purple)] hover:bg-[var(--purple)] hover:text-white')}>
           <Icon.Bolt />
         </button>
       </div>
@@ -1109,15 +1159,18 @@ function ProductListRow({product}){
           {product.discount>0 && <span className="text-xs text-gray-400 line-through">{inr(product.mrp)}</span>}
           {product.discount>0 && <span className="text-xs font-bold text-[var(--danger)]">{product.discount}% OFF</span>}
         </div>
+        {product.stock>0 && product.stock<=5 && <div className="mt-0.5"><Badge tone="danger">Only {product.stock} left</Badge></div>}
       </div>
       <div className="flex flex-col items-end gap-2 flex-shrink-0">
         <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)} className="focus-ring">
           <span key={isWished} className={"pop inline-block "+(isWished?'text-[var(--danger)]':'text-gray-300')}><Icon.Heart active={isWished} /></span>
         </button>
-        {!line ? (
+        {product.stock<=0 ? (
+          <span className="text-xs font-semibold text-gray-400 px-3 py-1.5">Out of Stock</span>
+        ) : !line ? (
           <button onClick={()=>addToCart(product.id,1)} className="btn-primary px-3 py-1.5 text-xs focus-ring">+ Add</button>
         ) : (
-          <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} small />
+          <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} max={product.stock} small />
         )}
       </div>
     </div>
@@ -1698,7 +1751,19 @@ function StoreDetailsModal({onClose}){
   );
 }
 
-function ProductRow({title, subtitle, products, viewAllHref}){
+function ProductRow({title, subtitle, products, viewAllHref, loading}){
+  if(loading){
+    return (
+      <div className="px-4 md:container-max md:mx-auto mt-7">
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <div className="h-5 w-40 rounded skeleton"></div>
+        </div>
+        <div className="flex gap-3 overflow-x-auto scrollbar-none pb-1">
+          {Array.from({length:4}).map((_,i)=> <div key={i} className="flex-shrink-0 w-[150px] h-[230px] rounded-xl skeleton"></div>)}
+        </div>
+      </div>
+    );
+  }
   if(!products || products.length===0) return null;
   return (
     <div className="px-4 md:container-max md:mx-auto mt-7">
@@ -1714,6 +1779,23 @@ function ProductRow({title, subtitle, products, viewAllHref}){
       </div>
     </div>
   );
+}
+
+// Fades a section in once it actually scrolls into view (rather than all at once on page load) —
+// used for the trust strip near the bottom of the homepage.
+function RevealOnScroll({children, className}){
+  const ref = useRef(null);
+  const [revealed, setRevealed] = useState(false);
+  useEffect(()=>{
+    const el = ref.current;
+    if(!el) return;
+    const obs = new IntersectionObserver((entries)=>{
+      if(entries[0].isIntersecting){ setRevealed(true); obs.disconnect(); }
+    }, { threshold: 0.2 });
+    obs.observe(el);
+    return ()=> obs.disconnect();
+  },[]);
+  return <div ref={ref} className={"reveal-on-scroll "+(revealed?'revealed ':'')+(className||'')}>{children}</div>;
 }
 
 function BannerCarousel({banners}){
@@ -1842,6 +1924,131 @@ function ExploreMoreFeed({products}){
   );
 }
 
+const PRICE_FILTERS = [
+  { label: 'Under ₹49', maxPrice: 49 },
+  { label: 'Under ₹99', maxPrice: 99 },
+  { label: 'Under ₹199', maxPrice: 199 },
+  { label: '₹199 & up', minPrice: 199 },
+];
+// Auto-scrolling "Deals of the Day" strip — only shows items with a real admin-set MRP above the
+// selling price (see mapDbProduct); if nobody's set an MRP yet, this quietly renders nothing rather
+// than showing a fake/empty "deals" section.
+function DealsStrip(){
+  const {products} = useApp();
+  const deals = useMemo(()=> products.filter(p=>p.discount>0).sort((a,b)=>b.discount-a.discount), [products]);
+  if(!deals.length) return null;
+  const loop = deals.length>2 ? [...deals, ...deals] : deals; // duplicated for a seamless marquee loop
+  return (
+    <div className="mt-7">
+      <div className="px-4 md:container-max md:mx-auto flex items-center gap-2 mb-2">
+        <span className="text-lg">🔥</span>
+        <h2 className="font-display font-bold text-lg">Deals of the Day</h2>
+      </div>
+      <div className="overflow-hidden px-4 md:px-0">
+        <div className="md:container-max md:mx-auto overflow-hidden">
+          <div className={"flex gap-3 "+(deals.length>2 ? 'deals-marquee-track' : '')}>
+            {loop.map((p,i)=>(
+              <a key={p.id+'-'+i} href={"#/product/"+p.id}
+                className="flex-shrink-0 w-[128px] card p-2 border-red-100" style={{background:'linear-gradient(180deg,#FFF5F5,#FFFFFF)'}}>
+                <ProductImg product={p} className="w-full aspect-square text-2xl mb-1.5 rounded-lg" />
+                <div className="text-[11px] font-semibold line-clamp-1">{p.name}</div>
+                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                  <span className="text-xs font-bold">{inr(p.price)}</span>
+                  <span className="text-[10px] text-gray-400 line-through">{inr(p.mrp)}</span>
+                </div>
+                <div className="text-[10px] font-bold text-[var(--danger)]">{p.discount}% OFF</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Reads/writes the small "recently viewed" list kept in localStorage (most-recent-first, capped).
+const RECENTLY_VIEWED_KEY = 'meraki_recently_viewed_v1';
+function recordRecentlyViewed(id){
+  try{
+    const raw = localStorage.getItem(RECENTLY_VIEWED_KEY);
+    let list = raw ? JSON.parse(raw) : [];
+    list = [id, ...list.filter(x=>x!==id)].slice(0,12);
+    localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(list));
+  } catch(e){ /* localStorage unavailable — recently viewed just won't persist, not fatal */ }
+}
+function useRecentlyViewedIds(){
+  const [ids, setIds] = useState([]);
+  useEffect(()=>{
+    try{ const raw = localStorage.getItem(RECENTLY_VIEWED_KEY); setIds(raw ? JSON.parse(raw) : []); }
+    catch(e){ setIds([]); }
+  },[]);
+  return ids;
+}
+
+// Cart reminder shown near the top of the homepage when something's already waiting in cart.
+function ContinueWhereLeftOff(){
+  const {cartLines} = useApp();
+  if(!cartLines.length) return null;
+  const count = cartLines.reduce((s,c)=>s+c.qty,0);
+  const preview = cartLines.slice(0,3);
+  return (
+    <a href="#/cart" className="block px-4 md:container-max md:mx-auto mt-4">
+      <div className="card p-3 flex items-center gap-3 border-[var(--purple)]" style={{background:'var(--purple-light)'}}>
+        <div className="flex -space-x-3 flex-shrink-0">
+          {preview.map(c=> <ProductImg key={c.id} product={c.product} className="w-10 h-10 rounded-full text-base border-2 border-white" />)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-[var(--purple)]">Continue where you left off</div>
+          <div className="text-xs text-[var(--muted)]">{count} item{count>1?'s':''} waiting in your cart</div>
+        </div>
+        <span className="text-[var(--purple)] font-bold text-sm flex-shrink-0">View Cart ›</span>
+      </div>
+    </a>
+  );
+}
+
+// Full-width "hero" tile dropped between shelves — a single bigger product with a short line of
+// copy, instead of restructuring the whole grid into variable sizes (that caused real bugs before).
+function SpotlightCard({product, tagline}){
+  if(!product) return null;
+  return (
+    <div className="px-4 md:container-max md:mx-auto mt-7">
+      <a href={"#/product/"+product.id} className="card p-0 overflow-hidden flex items-center gap-4 hover:shadow-lg transition-shadow">
+        <ProductImg product={product} className="w-28 h-28 md:w-40 md:h-40 text-4xl flex-shrink-0" />
+        <div className="py-3 pr-4 min-w-0">
+          <div className="text-[11px] font-bold text-[var(--purple)] uppercase tracking-wide">{tagline}</div>
+          <div className="font-display font-bold text-base md:text-xl mt-1 line-clamp-2">{product.name}</div>
+          <div className="flex items-baseline gap-2 mt-1.5">
+            <span className="font-bold text-lg">{inr(product.price)}</span>
+            {product.discount>0 && <span className="text-sm text-gray-400 line-through">{inr(product.mrp)}</span>}
+          </div>
+          <span className="btn-primary inline-block px-5 py-2 text-sm mt-2.5">Shop Now</span>
+        </div>
+      </a>
+    </div>
+  );
+}
+
+function PriceFilterChips(){
+  return (
+    <div className="px-4 md:container-max md:mx-auto mt-4">
+      <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
+        {PRICE_FILTERS.map(f=>{
+          const params = [];
+          if(f.maxPrice!=null) params.push('maxPrice='+f.maxPrice);
+          if(f.minPrice!=null) params.push('minPrice='+f.minPrice);
+          return (
+            <a key={f.label} href={'#/search?'+params.join('&')}
+              className="flex-shrink-0 px-4 py-2 rounded-full border border-[var(--line)] bg-white text-sm font-semibold hover:border-[var(--purple)] hover:text-[var(--purple)] focus-ring transition-colors">
+              {f.label}
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function HomePage(){
   const {wishlist, toggleWishlist, products, productsLoading, banners, categories} = useApp();
   const popular = products.filter(p=>p.tags.includes('bestseller'));
@@ -1856,10 +2063,29 @@ function HomePage(){
   const recommended = useMemo(()=> [...products].sort(()=>0.5-Math.random()).slice(0,8), [products]);
   const boughtTogether = useMemo(()=> products.filter(p=>['p1','p4','p6','p11'].includes(p.id)), [products]);
 
+  const recentIds = useRecentlyViewedIds();
+  const recentlyViewed = useMemo(()=> recentIds.map(id=>products.find(p=>p.id===id)).filter(Boolean), [recentIds, products]);
+
+  // Themed rows sourced from active banners that link to a category — lets whoever manages
+  // Banners in the admin panel effectively control seasonal homepage rows without touching code.
+  const bannerThemedRows = useMemo(()=>{
+    return shownBanners.map(b=>{
+      const m = /^#\/category\/([\w-]+)$/.exec(b.ctaLink||'');
+      if(!m) return null;
+      const rowProducts = products.filter(p=>p.category===m[1]).slice(0,8);
+      if(!rowProducts.length) return null;
+      return { id:b.id, title: [b.title, b.highlight].filter(Boolean).join(' '), slug:m[1], products:rowProducts };
+    }).filter(Boolean);
+  }, [shownBanners, products]);
+
+  const spotlightProduct = popular[2] || products[2] || null;
+
   return (
     <div className="fade-in">
       <div className="mobile-only"><ExitIntentGuard /></div>
       <BannerCarousel banners={shownBanners} />
+      <ContinueWhereLeftOff />
+      <PriceFilterChips />
 
       <div className="px-4 md:container-max md:mx-auto mt-6">
         <div className="flex gap-4 overflow-x-auto scrollbar-none pb-1 md:grid md:grid-cols-6 md:gap-4">
@@ -1884,19 +2110,23 @@ function HomePage(){
         )}
       </div>
 
-      <ProductRow title="New Arrivals 🆕" subtitle="Fresh on the shelves" products={newArrivals} />
-      <ProductRow title="Trending Now 📈" subtitle="What everyone's adding to cart" products={trending} />
-      <ProductRow title="Stationery Picks ✏️" products={stationeryPicks} viewAllHref="#/category/stationery" />
-      <ProductRow title="Toys We Love 🧸" products={toysPicks} viewAllHref="#/category/toys" />
-      <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/notebooks-diaries" />
-      <ProductRow title="Frequently Bought Together" subtitle="A handy combo to grab in one go" products={boughtTogether} />
-      <ProductRow title="Recommended For You 💜" products={recommended} />
+      <DealsStrip />
+      <ProductRow title="Recently Viewed 👀" products={recentlyViewed} />
+      <ProductRow title="New Arrivals 🆕" subtitle="Fresh on the shelves" products={newArrivals} loading={productsLoading} />
+      <ProductRow title="Trending Now 📈" subtitle="What everyone's adding to cart" products={trending} loading={productsLoading} />
+      <SpotlightCard product={spotlightProduct} tagline="Back-to-school favorite" />
+      <ProductRow title="Stationery Picks ✏️" products={stationeryPicks} viewAllHref="#/category/stationery" loading={productsLoading} />
+      <ProductRow title="Toys We Love 🧸" products={toysPicks} viewAllHref="#/category/toys" loading={productsLoading} />
+      {bannerThemedRows.map(row=> <ProductRow key={row.id} title={row.title} products={row.products} viewAllHref={"#/category/"+row.slug} />)}
+      <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/notebooks-diaries" loading={productsLoading} />
+      <ProductRow title="Frequently Bought Together" subtitle="A handy combo to grab in one go" products={boughtTogether} loading={productsLoading} />
+      <ProductRow title="Recommended For You 💜" products={recommended} loading={productsLoading} />
 
-      <div className="px-4 md:container-max md:mx-auto mt-8 grid grid-cols-3 gap-2 text-center text-[11px] md:text-sm">
+      <RevealOnScroll className="px-4 md:container-max md:mx-auto mt-8 grid grid-cols-3 gap-2 text-center text-[11px] md:text-sm">
         <div className="card p-3"><div className="text-xl">🚚</div><div className="font-bold mt-1">Fast Delivery</div><div className="text-[var(--muted)]">Within 2-4 hrs</div></div>
         <div className="card p-3"><div className="text-xl">🆓</div><div className="font-bold mt-1">Free Delivery</div><div className="text-[var(--muted)]">Above ₹299</div></div>
         <div className="card p-3"><div className="text-xl">🛡️</div><div className="font-bold mt-1">Safe Packaging</div><div className="text-[var(--muted)]">Carefully sealed</div></div>
-      </div>
+      </RevealOnScroll>
 
       {!productsLoading && <ExploreMoreFeed products={products} />}
 
@@ -2161,6 +2391,7 @@ function ProductPage({route}){
   const [variantIdx, setVariantIdx] = useState(0);
 
   useEffect(()=>{ setQty(1); setVariantIdx(0); }, [id]);
+  useEffect(()=>{ if(id) recordRecentlyViewed(id); }, [id]);
 
   if(!product) return <div className="p-8 text-center text-[var(--muted)]">Product not found. <a className="text-[var(--purple)] font-semibold" href="#/home">Go home</a></div>;
 
@@ -2209,6 +2440,7 @@ function ProductPage({route}){
           <div className="text-xs text-[var(--muted)] mt-1">Inclusive of all taxes</div>
           <div className="flex items-center gap-2 mt-3">
             {product.stock>0 ? <Badge tone="green">In Stock</Badge> : <Badge tone="danger">Out of Stock</Badge>}
+            {product.stock>0 && product.stock<=5 && <Badge tone="danger">Only {product.stock} left</Badge>}
             <span className="text-xs text-[var(--muted)]">Ships in 2-4 hrs</span>
           </div>
 
@@ -2227,20 +2459,22 @@ function ProductPage({route}){
             </div>
           )}
 
-          {!line && (
+          {!line && product.stock>0 && (
             <div className="flex items-center gap-4 mt-4 fade-in">
               <span className="text-sm font-semibold">Quantity</span>
-              <QuantitySelector qty={qty} onChange={(q)=>setQty(clamp(q,1,20))} />
+              <QuantitySelector qty={qty} onChange={(q)=>setQty(clamp(q,1,Math.min(20,product.stock)))} max={product.stock} />
             </div>
           )}
 
           <div key={line?'incart':'initial'} className="flex gap-3 mt-5 items-center fade-in">
             {line ? (
               <React.Fragment>
-                <div className="flex-shrink-0"><QuantitySelector qty={line.qty} onChange={onQtyChange} /></div>
+                <div className="flex-shrink-0"><QuantitySelector qty={line.qty} onChange={onQtyChange} max={product.stock} /></div>
                 <a href="#/cart" className="btn-primary flex-1 py-3 text-sm focus-ring text-center">Go to Cart</a>
                 <button onClick={()=>navigate('#/checkout/address')} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
               </React.Fragment>
+            ) : product.stock<=0 ? (
+              <button disabled className="flex-1 py-3 text-sm rounded-lg bg-gray-100 text-gray-400 font-semibold cursor-not-allowed">Out of Stock</button>
             ) : (
               <React.Fragment>
                 <button onClick={()=>{ addToCart(product.id, qty); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
@@ -2361,10 +2595,11 @@ function CartPage(){
                 <div className="flex-1 min-w-0">
                   <a href={"#/product/"+line.id} className="text-sm font-semibold line-clamp-2">{line.product.name}</a>
                   <div className="text-sm font-bold mt-1">{inr(line.product.price)}</div>
+                  {line.product.stock>0 && line.product.stock<=5 && <div className="text-[11px] font-semibold text-[var(--danger)] mt-0.5">Only {line.product.stock} left</div>}
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <button onClick={()=>removeFromCart(line.id)} aria-label="Remove item" className="text-[var(--danger)] text-sm focus-ring">🗑️</button>
-                  <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(line.id,q)} small />
+                  <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(line.id,q)} max={line.product.stock} small />
                 </div>
               </div>
             ))}
@@ -3066,27 +3301,37 @@ function OrderDetailPage({route}){
 function SearchPage(){
   const route = parseRoute(window.location.hash);
   const q = (route.query.q||'').toLowerCase().trim();
+  const maxPrice = route.query.maxPrice ? Number(route.query.maxPrice) : null;
+  const minPrice = route.query.minPrice ? Number(route.query.minPrice) : null;
   const [term, setTerm] = useState(q);
   const {products} = useApp();
   useEffect(()=> setTerm(q), [q]);
 
-  const results = term ? products.filter(p=>
-    p.name.toLowerCase().includes(term) ||
-    p.category.toLowerCase().includes(term) ||
-    p.sub.toLowerCase().includes(term) ||
-    p.brand.toLowerCase().includes(term)
-  ) : [];
+  const hasPriceFilter = maxPrice!=null || minPrice!=null;
+  const results = (term || hasPriceFilter) ? products.filter(p=>{
+    const matchesTerm = !term || p.name.toLowerCase().includes(term) ||
+      p.category.toLowerCase().includes(term) || p.sub.toLowerCase().includes(term) || p.brand.toLowerCase().includes(term);
+    const matchesMax = maxPrice==null || p.price <= maxPrice;
+    const matchesMin = minPrice==null || p.price >= minPrice;
+    return matchesTerm && matchesMax && matchesMin;
+  }) : [];
+
+  const priceLabel = maxPrice!=null && minPrice!=null ? `${inr(minPrice)}–${inr(maxPrice)}`
+    : maxPrice!=null ? `Under ${inr(maxPrice)}`
+    : minPrice!=null ? `${inr(minPrice)}+` : null;
 
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-8">
-      {!term ? (
+      {!term && !hasPriceFilter ? (
         <div className="text-center py-16 text-[var(--muted)]">
           <div className="text-4xl mb-2">🔎</div>
           <div className="text-sm">Start typing to search across all products.</div>
         </div>
       ) : (
         <>
-          <div className="text-sm text-[var(--muted)] mb-3">{results.length} results for "{term}"</div>
+          <div className="text-sm text-[var(--muted)] mb-3">
+            {results.length} results{term ? <> for "{term}"</> : null}{priceLabel ? <> · {priceLabel}</> : null}
+          </div>
           <ProductGrid products={results} />
         </>
       )}
@@ -3841,6 +4086,7 @@ function AdminProductFormModal({item, onSaved, onClose}){
   const { showToast } = useApp();
   const [form, setForm] = useState({
     price: String(item.price),
+    mrp: item.mrp ? String(item.mrp) : '',
     qty: String(item.qty),
     online_description: item.online_description || '',
     online_visible: item.online_visible,
@@ -3886,9 +4132,15 @@ function AdminProductFormModal({item, onSaved, onClose}){
     const price = Number(form.price), qty = Number(form.qty);
     if(!form.price || isNaN(price) || price<0){ showToast('Enter a valid price','⚠️'); return; }
     if(form.qty==='' || isNaN(qty) || qty<0){ showToast('Enter a valid stock quantity','⚠️'); return; }
+    let mrp = null;
+    if(form.mrp.trim()!==''){
+      const mrpNum = Number(form.mrp);
+      if(isNaN(mrpNum) || mrpNum<0){ showToast('Enter a valid MRP, or leave it blank','⚠️'); return; }
+      mrp = mrpNum;
+    }
     setSaving(true);
     const { data, error } = await sbAdmin.from('items').update({
-      price, qty,
+      price, mrp, qty,
       online_description: form.online_description.trim() || null,
       online_visible: form.online_visible,
       is_featured: form.is_featured,
@@ -3928,6 +4180,11 @@ function AdminProductFormModal({item, onSaved, onClose}){
         <div className="grid grid-cols-2 gap-3">
           <div><label className="text-xs font-semibold text-[var(--muted)]">Selling Price (₹)</label><input type="number" value={form.price} onChange={e=>setForm({...form,price:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
           <div><label className="text-xs font-semibold text-[var(--muted)]">Stock Quantity</label><input type="number" value={form.qty} onChange={e=>setForm({...form,qty:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">MRP / Strike-through Price (₹) — optional</label>
+          <input type="number" value={form.mrp} onChange={e=>setForm({...form,mrp:e.target.value})} placeholder="Leave blank for no discount shown" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          <div className="text-[10px] text-[var(--muted)] mt-1">Only shows as a discount on the storefront when set higher than the selling price — this is what feeds the Deals strip.</div>
         </div>
         <div className="text-[10px] text-[var(--muted)] -mt-1">Shared with your POS — changes here affect both channels.</div>
         <div>
