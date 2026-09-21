@@ -40,30 +40,46 @@
     --danger:#E0455D;
   }
   html.dark{
-    --purple-light:#3A2E57;
-    --green-light:#173829;
+    --purple-light:#241b38;
+    --green-light:#0f2a1d;
     --ink:#F1ECFB;
-    --muted:#A79BC4;
-    --line:#33294D;
+    --muted:#948da8;
+    --line:#232228;
   }
-  html.dark body{background:#151022;}
   html.dark .card,
   html.dark .floating-nav,
-  html.dark .bg-white{background:#211a35 !important;}
-  html.dark input, html.dark select, html.dark textarea{background:#1b1530 !important; color:var(--ink) !important;}
-  html.dark ::placeholder{color:#6f6390;}
-  html.dark .placeholder-img{filter:brightness(.92) saturate(.92);}
-  html.dark .skeleton{background:linear-gradient(90deg,#2b2246 25%,#352a56 37%,#2b2246 63%);}
-  html.dark .chip{color:var(--ink);}
+  html.dark .bg-white{
+    background:linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0) 45%), #101012 !important;
+    border-color:#222226 !important;
+  }
+  html.dark .card{box-shadow:0 1px 0 rgba(255,255,255,0.05) inset, 0 10px 28px -6px rgba(0,0,0,0.65) !important;}
+  html.dark .card:hover{box-shadow:0 1px 0 rgba(255,255,255,0.07) inset, 0 22px 42px -8px rgba(0,0,0,0.75) !important;}
+  html.dark .btn-secondary{background:linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0) 45%), #101012;}
+  html.dark input, html.dark select, html.dark textarea{background:#0c0c0e !important; color:var(--ink) !important; border-color:#26262b !important;}
+  html.dark ::placeholder{color:#6b6478;}
+  html.dark .placeholder-img{filter:brightness(.9) saturate(.9);}
+  html.dark .skeleton{background:linear-gradient(90deg,#18181b 25%,#232326 37%,#18181b 63%);}
+  html.dark .chip{color:var(--ink); border-color:#28282d;}
   html *{transition:background-color .25s ease, border-color .25s ease, color .25s ease;}
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
     font-family:'Quicksand',sans-serif;
     color:var(--ink);
-    background:#FBFAFE;
+    background:
+      radial-gradient(120% 60% at 12% -8%, rgba(108,63,197,0.10), transparent 55%),
+      radial-gradient(100% 55% at 100% 0%, rgba(245,166,35,0.09), transparent 50%),
+      radial-gradient(90% 50% at 50% 100%, rgba(30,158,90,0.07), transparent 55%),
+      #FBFAFE;
     -webkit-font-smoothing:antialiased;
     overscroll-behavior-y:none;
+  }
+  html.dark body{
+    background:
+      radial-gradient(120% 60% at 12% -8%, rgba(142,79,224,0.10), transparent 55%),
+      radial-gradient(100% 55% at 100% 0%, rgba(245,166,35,0.05), transparent 50%),
+      radial-gradient(90% 50% at 50% 100%, rgba(30,158,90,0.05), transparent 55%),
+      #050506;
   }
   h1,h2,h3,h4,.font-display{font-family:'Fredoka',sans-serif !important;letter-spacing:.01em;}
   button,a,input,.card,.chip{transition:all .22s cubic-bezier(.25,.8,.25,1);}
@@ -87,24 +103,29 @@
     background:#fff;
     border:1px solid var(--line);
     border-radius:22px;
-    box-shadow:0 2px 10px rgba(108,63,197,0.05);
+    box-shadow:0 1px 2px rgba(108,63,197,0.06), 0 10px 24px -8px rgba(108,63,197,0.10);
     transition:transform .28s cubic-bezier(.25,.8,.25,1), box-shadow .28s ease, border-color .2s ease;
+    will-change:transform;
   }
-  .card:hover{transform:translateY(-3px); box-shadow:0 10px 24px rgba(108,63,197,0.12);}
+  .card:hover{transform:translateY(-4px); box-shadow:0 2px 4px rgba(108,63,197,0.08), 0 20px 36px -10px rgba(108,63,197,0.20);}
+  .card:active{transform:translateY(-1px) scale(.985);}
+  .tilt-card{transform-style:preserve-3d; transition:transform .12s ease-out, box-shadow .28s ease;}
+  @media (prefers-reduced-motion: reduce){ .tilt-card{transition:box-shadow .28s ease !important;} }
   .btn-primary{
     background:var(--purple);color:#fff;border-radius:16px;font-weight:700;
-    transition:transform .18s cubic-bezier(.34,1.56,.64,1), background .18s ease, box-shadow .18s ease;
-    box-shadow:0 6px 16px rgba(108,63,197,0.32);
+    transition:transform .16s cubic-bezier(.34,1.56,.64,1), background .18s ease, box-shadow .16s ease;
+    box-shadow:0 4px 0 var(--purple-dark), 0 10px 20px -4px rgba(108,63,197,0.4);
   }
-  .btn-primary:hover{background:var(--purple-dark);transform:translateY(-2px) scale(1.015);}
-  .btn-primary:active{transform:translateY(0px) scale(.95);}
+  .btn-primary:hover{background:var(--purple-dark);transform:translateY(-2px);box-shadow:0 6px 0 var(--purple-dark), 0 14px 24px -4px rgba(108,63,197,0.42);}
+  .btn-primary:active{transform:translateY(3px);box-shadow:0 1px 0 var(--purple-dark), 0 4px 10px -2px rgba(108,63,197,0.3);}
   .btn-primary:disabled{background:#C9BEE5;box-shadow:none;cursor:not-allowed;transform:none;}
   .btn-secondary{
     background:#fff;color:var(--purple);border:1.5px solid var(--purple);border-radius:16px;font-weight:700;
-    transition:all .18s cubic-bezier(.34,1.56,.64,1);
+    transition:transform .16s cubic-bezier(.34,1.56,.64,1), background .16s ease, box-shadow .16s ease;
+    box-shadow:0 4px 0 var(--purple-light), 0 6px 14px -4px rgba(108,63,197,0.18);
   }
-  .btn-secondary:hover{background:var(--purple-light);transform:translateY(-2px) scale(1.015);}
-  .btn-secondary:active{transform:translateY(0) scale(.95);}
+  .btn-secondary:hover{background:var(--purple-light);transform:translateY(-2px);}
+  .btn-secondary:active{transform:translateY(3px);box-shadow:0 1px 0 var(--purple-light);}
   .chip{
     border:1.5px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink);
     transition:all .15s ease; white-space:nowrap;
@@ -155,6 +176,11 @@
   @keyframes sparkleSpin{0%,100%{transform:rotate(0deg) scale(1);}50%{transform:rotate(20deg) scale(1.15);}}
   .skeleton{background:linear-gradient(90deg,#EDE7F7 25%,#F5F1FC 37%,#EDE7F7 63%);background-size:400% 100%;animation:sk 1.4s ease infinite;}
   @keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
+  .glass-header{background:rgba(255,255,255,.72); backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%);}
+  html.dark .glass-header{background:rgba(6,6,8,.78);}
+  .page-transition{animation:pageTransitionIn .38s cubic-bezier(.22,.9,.32,1);}
+  @keyframes pageTransitionIn{from{opacity:0;transform:translateY(10px) scale(.99);}to{opacity:1;transform:translateY(0) scale(1);}}
+  @media (prefers-reduced-motion: reduce){ .page-transition{animation:none;} }
 
   /* Floating bottom nav */
   .floating-nav{
@@ -274,6 +300,34 @@ const DEFAULT_PRODUCTS = [
 
 const uid = () => Math.random().toString(36).slice(2,9);
 const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+// Small "flying to cart" flourish when something's added — purely decorative, so any failure here
+// (element not found, layout not ready, etc.) is swallowed rather than ever blocking the actual
+// add-to-cart action. Lands on the cart icon, which already has its own arrival bounce/wiggle.
+function flyToCart(fromEl){
+  try{
+    // CartButton renders once per header (mobile + desktop), both present in the DOM at once —
+    // CSS just hides whichever doesn't match the viewport — so pick whichever instance is
+    // actually visible rather than assuming the first match in the DOM is the right one.
+    const candidates = document.querySelectorAll('.cart-fly-target');
+    let cartTarget = null;
+    for(const el of candidates){ const r = el.getBoundingClientRect(); if(r.width>0 && r.height>0){ cartTarget = el; break; } }
+    if(!cartTarget || !fromEl || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = cartTarget.getBoundingClientRect();
+    if(!fromRect.width || !toRect.width) return;
+    const flyer = document.createElement('div');
+    flyer.textContent = '🛍️';
+    flyer.style.cssText = `position:fixed;z-index:9999;left:${fromRect.left+fromRect.width/2-14}px;top:${fromRect.top+fromRect.height/2-14}px;width:28px;height:28px;font-size:20px;line-height:28px;text-align:center;pointer-events:none;transition:transform .55s cubic-bezier(.3,.6,.3,1), opacity .5s ease .2s;will-change:transform,opacity;`;
+    document.body.appendChild(flyer);
+    requestAnimationFrame(()=>{
+      const dx = (toRect.left+toRect.width/2) - (fromRect.left+fromRect.width/2);
+      const dy = (toRect.top+toRect.height/2) - (fromRect.top+fromRect.height/2);
+      flyer.style.transform = `translate(${dx}px, ${dy}px) scale(.25) rotate(20deg)`;
+      flyer.style.opacity = '0';
+    });
+    setTimeout(()=> flyer.remove(), 650);
+  } catch(e){ /* decorative only */ }
+}
 const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
 
 const DEFAULT_BANNERS = [
@@ -307,6 +361,7 @@ function mapDbProduct(row){
     name: row.name,
     category: slug,
     categoryLabel: row.category,
+    subcategory: row.subcategory || null,
     sub: row.brand || 'General',
     brand: row.brand || 'Generic',
     price,
@@ -588,7 +643,7 @@ function AppProvider({children}){
   useEffect(()=>{
     document.documentElement.classList.toggle('dark', darkMode);
     const meta = document.getElementById('themeColorMeta');
-    if(meta) meta.setAttribute('content', darkMode ? '#151022' : '#ffffff');
+    if(meta) meta.setAttribute('content', darkMode ? '#050506' : '#ffffff');
   },[darkMode]);
 
   const showToast = useCallback((msg, icon)=>{
@@ -1035,6 +1090,29 @@ function LogoBlock(){
     </div>
   );
 }
+function greetingWord(){
+  const h = new Date().getHours();
+  if(h<5) return 'Still up';
+  if(h<12) return 'Good morning';
+  if(h<17) return 'Good afternoon';
+  if(h<21) return 'Good evening';
+  return 'Good night';
+}
+// Replaces the brand wordmark in the header with a personal greeting — "Home" in the nav (desktop)
+// and the logo elsewhere (footer, auth screens) still carry the Meraki identity, so it isn't lost,
+// just no longer competing for space with the person's own name up top.
+function GreetingBlock(){
+  const {loggedIn, customerProfile} = useApp();
+  const firstName = (customerProfile && customerProfile.full_name) ? customerProfile.full_name.trim().split(/\s+/)[0] : null;
+  return (
+    <a href="#/home" className="leading-tight focus-ring block">
+      <div className="text-[11px] text-[var(--muted)] font-semibold">{greetingWord()}{firstName ? ',' : '!'}</div>
+      <div className="text-[15px] font-display font-bold -mt-0.5 truncate max-w-[160px] md:max-w-none">
+        {firstName ? <>{firstName} <span className="sparkle inline-block">👋</span></> : (loggedIn ? <>Shopper <span className="sparkle inline-block">👋</span></> : <>Welcome <span className="sparkle inline-block">👋</span></>)}
+      </div>
+    </a>
+  );
+}
 
 function StarRating({rating}){
   return (
@@ -1052,6 +1130,25 @@ function Badge({children, tone='purple'}){
     danger:'bg-red-50 text-[var(--danger)]',
   };
   return <span className={"px-2 py-0.5 rounded-full text-[11px] font-bold "+tones[tone]}>{children}</span>;
+}
+
+// Lightweight 3D tilt-on-hover for product cards — only on devices with a real mouse (hover +
+// fine pointer), so it never interferes with touch scrolling/tapping on phones, and it backs off
+// entirely if the person has motion reduction turned on.
+const TILT_ENABLED = typeof window!=='undefined' && window.matchMedia &&
+  window.matchMedia('(hover:hover) and (pointer:fine)').matches &&
+  !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function useTilt(){
+  const ref = useRef(null);
+  const onMouseMove = (e)=>{
+    if(!TILT_ENABLED || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left)/rect.width - 0.5;
+    const y = (e.clientY - rect.top)/rect.height - 0.5;
+    ref.current.style.transform = `perspective(800px) rotateX(${(-y*7).toFixed(2)}deg) rotateY(${(x*7).toFixed(2)}deg) translateY(-4px)`;
+  };
+  const onMouseLeave = ()=>{ if(ref.current) ref.current.style.transform = ''; };
+  return { ref, onMouseMove, onMouseLeave };
 }
 
 function QuantitySelector({qty, onChange, small, max}){
@@ -1086,13 +1183,14 @@ function ProductCard({product}){
   const {cart, addToCart, setCartQty, wishlist, toggleWishlist} = useApp();
   const line = cart.find(c=>c.id===product.id);
   const isWished = wishlist.includes(product.id);
+  const tilt = useTilt();
   const quickBuy = (e)=>{
     e.preventDefault(); e.stopPropagation();
     addToCart(product.id,1);
     navigate('#/checkout/address');
   };
   return (
-    <div className="card p-2.5 flex flex-col relative group">
+    <div ref={tilt.ref} onMouseMove={tilt.onMouseMove} onMouseLeave={tilt.onMouseLeave} className="card tilt-card p-2.5 flex flex-col relative group">
       <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
         className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
         <span key={isWished} className={"pop inline-block "+(isWished ? 'text-[var(--danger)]' : 'text-gray-300')}><Icon.Heart active={isWished} /></span>
@@ -1124,7 +1222,7 @@ function ProductCard({product}){
           {product.stock<=0 ? (
             <button disabled className="w-full py-1.5 text-sm rounded-lg bg-gray-100 text-gray-400 font-semibold cursor-not-allowed">Out of Stock</button>
           ) : !line ? (
-            <button onClick={()=>addToCart(product.id,1)}
+            <button onClick={(e)=>{ addToCart(product.id,1); flyToCart(e.currentTarget); }}
               className="btn-primary w-full py-1.5 text-sm flex items-center justify-center gap-1 focus-ring">
               <span>+</span> Add
             </button>
@@ -1168,7 +1266,7 @@ function ProductListRow({product}){
         {product.stock<=0 ? (
           <span className="text-xs font-semibold text-gray-400 px-3 py-1.5">Out of Stock</span>
         ) : !line ? (
-          <button onClick={()=>addToCart(product.id,1)} className="btn-primary px-3 py-1.5 text-xs focus-ring">+ Add</button>
+          <button onClick={(e)=>{ addToCart(product.id,1); flyToCart(e.currentTarget); }} className="btn-primary px-3 py-1.5 text-xs focus-ring">+ Add</button>
         ) : (
           <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} max={product.stock} small />
         )}
@@ -1257,7 +1355,7 @@ function CartButton(){
     }
   },[cartCount]);
   return (
-    <a href="#/cart" aria-label="Cart" className="relative w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring">
+    <a href="#/cart" className="cart-fly-target relative w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring" aria-label="Cart">
       <span className={"inline-block "+(bounce?'wiggle':'')}><Icon.Cart /></span>
       {cartCount>0 && <span className={"absolute -top-1 -right-1 bg-[var(--danger)] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center "+(bounce?'pulse':'')}>{cartCount}</span>}
     </a>
@@ -1362,7 +1460,7 @@ function MobileHeader({route}){
 
   return (
     <div className="mobile-only sticky top-0 z-40">
-      <div className="bg-white rounded-b-2xl overflow-hidden shadow-sm border-b border-[var(--line)]">
+      <div className="glass-header rounded-b-2xl overflow-hidden shadow-sm border-b border-[var(--line)]">
         <div className="flex items-center gap-3 px-4 py-3">
           {!searchOpen && (
             route.parts.length>1 || ['cart','search','wishlist','account','orders','checkout'].includes(route.parts[0]) ? (
@@ -1388,7 +1486,7 @@ function MobileHeader({route}){
               </form>
             )}
           </div>
-          {!searchOpen && <LogoBlock />}
+          {!searchOpen && <GreetingBlock />}
           <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
             {!searchOpen ? (
               <button aria-label="Search" onClick={()=>setSearchOpen(true)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Search /></button>
@@ -1632,9 +1730,9 @@ function MobileMenu({open, onClose}){
 function DesktopHeader({route}){
   const {categories} = useApp();
   return (
-    <div className="desktop-only sticky top-0 z-40 bg-white border-b border-[var(--line)]">
+    <div className="desktop-only sticky top-0 z-40 glass-header border-b border-[var(--line)]">
       <div className="container-max flex items-center gap-8 px-8 py-3.5">
-        <LogoBlock />
+        <GreetingBlock />
         <nav className="flex items-center gap-6 text-sm font-semibold text-[var(--ink)]">
           <a href="#/home" className="hover:text-[var(--purple)] focus-ring">Home</a>
           {categories.map(c=> <a key={c.id} href={"#/category/"+c.id} className="hover:text-[var(--purple)] focus-ring">{c.name}</a>)}
@@ -1933,6 +2031,21 @@ const PRICE_FILTERS = [
 // Auto-scrolling "Deals of the Day" strip — only shows items with a real admin-set MRP above the
 // selling price (see mapDbProduct); if nobody's set an MRP yet, this quietly renders nothing rather
 // than showing a fake/empty "deals" section.
+function DealTile({product:p}){
+  const tilt = useTilt();
+  return (
+    <a ref={tilt.ref} onMouseMove={tilt.onMouseMove} onMouseLeave={tilt.onMouseLeave} href={"#/product/"+p.id}
+      className="flex-shrink-0 w-[128px] card tilt-card p-2 border-red-100" style={{background:'linear-gradient(180deg,#FFF5F5,#FFFFFF)'}}>
+      <ProductImg product={p} className="w-full aspect-square text-2xl mb-1.5 rounded-lg" />
+      <div className="text-[11px] font-semibold line-clamp-1">{p.name}</div>
+      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+        <span className="text-xs font-bold">{inr(p.price)}</span>
+        <span className="text-[10px] text-gray-400 line-through">{inr(p.mrp)}</span>
+      </div>
+      <div className="text-[10px] font-bold text-[var(--danger)]">{p.discount}% OFF</div>
+    </a>
+  );
+}
 function DealsStrip(){
   const {products} = useApp();
   const deals = useMemo(()=> products.filter(p=>p.discount>0).sort((a,b)=>b.discount-a.discount), [products]);
@@ -1947,18 +2060,7 @@ function DealsStrip(){
       <div className="overflow-hidden px-4 md:px-0">
         <div className="md:container-max md:mx-auto overflow-hidden">
           <div className={"flex gap-3 "+(deals.length>2 ? 'deals-marquee-track' : '')}>
-            {loop.map((p,i)=>(
-              <a key={p.id+'-'+i} href={"#/product/"+p.id}
-                className="flex-shrink-0 w-[128px] card p-2 border-red-100" style={{background:'linear-gradient(180deg,#FFF5F5,#FFFFFF)'}}>
-                <ProductImg product={p} className="w-full aspect-square text-2xl mb-1.5 rounded-lg" />
-                <div className="text-[11px] font-semibold line-clamp-1">{p.name}</div>
-                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                  <span className="text-xs font-bold">{inr(p.price)}</span>
-                  <span className="text-[10px] text-gray-400 line-through">{inr(p.mrp)}</span>
-                </div>
-                <div className="text-[10px] font-bold text-[var(--danger)]">{p.discount}% OFF</div>
-              </a>
-            ))}
+            {loop.map((p,i)=> <DealTile key={p.id+'-'+i} product={p} />)}
           </div>
         </div>
       </div>
@@ -2010,10 +2112,11 @@ function ContinueWhereLeftOff(){
 // Full-width "hero" tile dropped between shelves — a single bigger product with a short line of
 // copy, instead of restructuring the whole grid into variable sizes (that caused real bugs before).
 function SpotlightCard({product, tagline}){
+  const tilt = useTilt();
   if(!product) return null;
   return (
     <div className="px-4 md:container-max md:mx-auto mt-7">
-      <a href={"#/product/"+product.id} className="card p-0 overflow-hidden flex items-center gap-4 hover:shadow-lg transition-shadow">
+      <a ref={tilt.ref} onMouseMove={tilt.onMouseMove} onMouseLeave={tilt.onMouseLeave} href={"#/product/"+product.id} className="card tilt-card p-0 overflow-hidden flex items-center gap-4">
         <ProductImg product={product} className="w-28 h-28 md:w-40 md:h-40 text-4xl flex-shrink-0" />
         <div className="py-3 pr-4 min-w-0">
           <div className="text-[11px] font-bold text-[var(--purple)] uppercase tracking-wide">{tagline}</div>
@@ -2184,12 +2287,14 @@ function CategoryPage({route}){
   const [brandFilter, setBrandFilter] = useState([]);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [view, setView] = useState('grid');
+  const [subcat, setSubcat] = useState('');
 
   useEffect(()=>{
     setPriceMax(null);
     setBrandFilter([]);
     setInStockOnly(false);
     setSort('popular');
+    setSubcat('');
   },[routeParam]);
 
   const matchedCategory = categories.find(c=>c.id===routeParam) || categories[0];
@@ -2197,6 +2302,14 @@ function CategoryPage({route}){
   const base = matchedCategory ? products.filter(p=>p.category===matchedCategory.id) : products;
   const headerLabel = matchedCategory ? matchedCategory.name : 'All Products';
   const headerIcon = matchedCategory ? matchedCategory.icon : '🛍️';
+
+  // Subcategories are whatever real values exist on this category's products (set either in the
+  // POS or from the storefront admin's product editor) — no separate taxonomy to maintain.
+  const subcategories = useMemo(()=>{
+    const counts = {};
+    base.forEach(p=>{ if(p.subcategory) counts[p.subcategory] = (counts[p.subcategory]||0)+1; });
+    return Object.keys(counts).sort().map(name=>({name, count:counts[name]}));
+  },[base]);
 
   const brands = useMemo(()=> Array.from(new Set(base.map(p=>p.brand))), [base]);
   // The real ceiling for this category's price slider — never caps products by
@@ -2206,6 +2319,7 @@ function CategoryPage({route}){
   const priceFilterActive = priceMax!=null && priceMax < priceCeiling;
 
   let list = base.filter(p=> p.price<=effectivePriceMax);
+  if(subcat) list = list.filter(p=>p.subcategory===subcat);
   if(brandFilter.length) list = list.filter(p=>brandFilter.includes(p.brand));
   if(inStockOnly) list = list.filter(p=>p.stock>0);
 
@@ -2240,6 +2354,21 @@ function CategoryPage({route}){
           <div className="text-sm text-[var(--muted)]">{list.length} products</div>
         </div>
 
+        {subcategories.length>0 && (
+          <div className="flex gap-2 overflow-x-auto scrollbar-none pb-2 mb-1">
+            <button onClick={()=>setSubcat('')}
+              className={"flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors focus-ring "+(subcat===''?'bg-[var(--purple)] text-white border-[var(--purple)]':'bg-white border-[var(--line)] hover:border-[var(--purple)]')}>
+              All ({base.length})
+            </button>
+            {subcategories.map(s=> (
+              <button key={s.name} onClick={()=>setSubcat(s.name)}
+                className={"flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors focus-ring "+(subcat===s.name?'bg-[var(--purple)] text-white border-[var(--purple)]':'bg-white border-[var(--line)] hover:border-[var(--purple)]')}>
+                {s.name} ({s.count})
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="pb-2">
           <div className="flex items-center justify-between mb-2 gap-2">
             <button onClick={()=>setFiltersOpen(true)} className="chip flex items-center gap-1 focus-ring">🧰 Filters</button>
@@ -2249,7 +2378,7 @@ function CategoryPage({route}){
               <button onClick={()=>setView('list')} className={"chip px-2 "+(view==='list'?'active':'')}>≡</button>
             </div>
           </div>
-          <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(brandFilter.length||inStockOnly||priceFilterActive) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
+          <div className="text-xs text-[var(--muted)] mb-2">{list.length} Products {(brandFilter.length||inStockOnly||priceFilterActive||subcat) && <span className="text-[var(--purple)] font-semibold">· Filter Applied</span>}</div>
         </div>
         {productsLoading ? (
           <ProductGridSkeleton count={6} cols="grid-cols-2 lg:grid-cols-3" />
@@ -2477,7 +2606,7 @@ function ProductPage({route}){
               <button disabled className="flex-1 py-3 text-sm rounded-lg bg-gray-100 text-gray-400 font-semibold cursor-not-allowed">Out of Stock</button>
             ) : (
               <React.Fragment>
-                <button onClick={()=>{ addToCart(product.id, qty); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
+                <button onClick={(e)=>{ addToCart(product.id, qty); flyToCart(e.currentTarget); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
                 <button onClick={()=>{ addToCart(product.id, qty); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
               </React.Fragment>
             )}
@@ -4082,16 +4211,24 @@ function AdminDashboard(){
   );
 }
 
-function AdminProductFormModal({item, onSaved, onClose}){
+function AdminProductFormModal({item, allItems, onSaved, onClose}){
   const { showToast } = useApp();
   const [form, setForm] = useState({
     price: String(item.price),
     mrp: item.mrp ? String(item.mrp) : '',
     qty: String(item.qty),
+    subcategory: item.subcategory || '',
     online_description: item.online_description || '',
     online_visible: item.online_visible,
     is_featured: item.is_featured,
   });
+  // Existing subcategories used elsewhere in this same main category — offered as suggestions so
+  // typos don't create near-duplicate groupings (e.g. "Lunch Box" vs "Lunch Boxes").
+  const subcategorySuggestions = useMemo(()=>{
+    const set = new Set();
+    (allItems||[]).forEach(it=>{ if(it.category===item.category && it.subcategory) set.add(it.subcategory); });
+    return Array.from(set).sort();
+  },[allItems, item.category]);
   const [saving, setSaving] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
   const [imageLoading, setImageLoading] = useState(true);
@@ -4141,6 +4278,7 @@ function AdminProductFormModal({item, onSaved, onClose}){
     setSaving(true);
     const { data, error } = await sbAdmin.from('items').update({
       price, mrp, qty,
+      subcategory: form.subcategory.trim() || null,
       online_description: form.online_description.trim() || null,
       online_visible: form.online_visible,
       is_featured: form.is_featured,
@@ -4159,6 +4297,13 @@ function AdminProductFormModal({item, onSaved, onClose}){
           <div className="font-bold">{item.name}</div>
           <div className="text-xs text-[var(--muted)] mt-0.5">{item.category} · {item.brand || 'No brand'}</div>
           <div className="text-[10px] text-[var(--muted)] mt-1">Name, category and brand are managed in your POS app.</div>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Subcategory (within {item.category}) — optional</label>
+          <input list="subcat-suggestions" value={form.subcategory} onChange={e=>setForm({...form,subcategory:e.target.value})}
+            placeholder="e.g. Lunch Boxes, Cups/Mugs, Pouches" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          <datalist id="subcat-suggestions">{subcategorySuggestions.map(s=> <option key={s} value={s} />)}</datalist>
+          <div className="text-[10px] text-[var(--muted)] mt-1">Groups this product under {item.category} on the storefront — e.g. School Essentials → Lunch Boxes, Cups/Mugs, Pouches.</div>
         </div>
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Product Photo</label>
@@ -4307,7 +4452,7 @@ function AdminProducts(){
         </React.Fragment>
       )}
 
-      {editingItem && <AdminProductFormModal item={editingItem} onSaved={onSaved} onClose={()=>setEditingItem(null)} />}
+      {editingItem && <AdminProductFormModal item={editingItem} allItems={items} onSaved={onSaved} onClose={()=>setEditingItem(null)} />}
     </div>
   );
 }
@@ -4691,24 +4836,27 @@ function AdminRoot({route}){
 function PageRouter({route}){
   const parts = route.parts;
   const top = parts[0] || 'home';
+  let page;
   switch(top){
-    case 'home': return <HomePage />;
-    case 'category': return <CategoryPage route={route} />;
-    case 'product': return <ProductPage route={route} />;
-    case 'cart': return <CartPage />;
+    case 'home': page = <HomePage />; break;
+    case 'category': page = <CategoryPage route={route} />; break;
+    case 'product': page = <ProductPage route={route} />; break;
+    case 'cart': page = <CartPage />; break;
     case 'checkout':
-      if(parts[1]==='payment') return <CheckoutPaymentPage />;
-      if(parts[1]==='confirm') return <CheckoutConfirmPage />;
-      return <CheckoutAddressPage />;
-    case 'order-confirmation': return <OrderConfirmationPage route={route} />;
+      if(parts[1]==='payment') page = <CheckoutPaymentPage />;
+      else if(parts[1]==='confirm') page = <CheckoutConfirmPage />;
+      else page = <CheckoutAddressPage />;
+      break;
+    case 'order-confirmation': page = <OrderConfirmationPage route={route} />; break;
     case 'orders':
-      if(parts[1]) return <OrderDetailPage route={route} />;
-      return <OrdersPage />;
-    case 'search': return <SearchPage />;
-    case 'wishlist': return <WishlistPage />;
-    case 'account': return <AccountPage />;
-    default: return <HomePage />;
+      page = parts[1] ? <OrderDetailPage route={route} /> : <OrdersPage />;
+      break;
+    case 'search': page = <SearchPage />; break;
+    case 'wishlist': page = <WishlistPage />; break;
+    case 'account': page = <AccountPage />; break;
+    default: page = <HomePage />;
   }
+  return <div key={parts.join('/')} className="page-transition">{page}</div>;
 }
 
 function AuthShellBackground(){
