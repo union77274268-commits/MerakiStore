@@ -1379,7 +1379,11 @@ function CartPreviewSheet({open, onClose}){
   if(!open) return null;
   const itemCount = cartLines.reduce((s,c)=>s+c.qty,0);
 
-  return (
+  // Rendered via a portal straight into <body> — the header this button lives in uses
+  // backdrop-filter for the frosted-glass look, and CSS spec makes that create a new containing
+  // block for position:fixed descendants, which was squeezing this sheet into the header's own
+  // small bounding box instead of covering the viewport. A portal sidesteps that entirely.
+  return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[190] flex items-end sm:items-center sm:justify-center" onClick={requestClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm fade-in"></div>
       <div onClick={e=>e.stopPropagation()}
@@ -1419,7 +1423,8 @@ function CartPreviewSheet({open, onClose}){
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1491,7 +1496,7 @@ function SearchPalette({open, onClose}){
     p.name.toLowerCase().includes(term) || p.category.toLowerCase().includes(term) || p.brand.toLowerCase().includes(term)
   ).slice(0,8) : [];
 
-  return (
+  return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[10vh] px-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/55 backdrop-blur-sm fade-in"></div>
       <div onClick={e=>e.stopPropagation()}
@@ -1544,7 +1549,8 @@ function SearchPalette({open, onClose}){
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1878,17 +1884,59 @@ function MobileMenu({open, onClose}){
   );
 }
 
+function CategoryNavPills(){
+  const {categories} = useApp();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const VISIBLE_COUNT = 4;
+  const visible = categories.slice(0, VISIBLE_COUNT);
+  const rest = categories.slice(VISIBLE_COUNT);
+
+  useEffect(()=>{
+    if(!moreOpen) return;
+    const onDocClick = (e)=>{ if(wrapRef.current && !wrapRef.current.contains(e.target)) setMoreOpen(false); };
+    const onEsc = (e)=>{ if(e.key==='Escape') setMoreOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return ()=>{ document.removeEventListener('mousedown', onDocClick); document.removeEventListener('keydown', onEsc); };
+  },[moreOpen]);
+
+  return (
+    <nav className="flex items-center gap-1.5 text-sm font-semibold text-[var(--ink)] flex-shrink-0">
+      <a href="#/home" className="px-3 py-1.5 rounded-full hover:bg-[var(--purple-light)] hover:text-[var(--purple)] transition-colors focus-ring whitespace-nowrap">Home</a>
+      {visible.map(c=> (
+        <a key={c.id} href={"#/category/"+c.id} className="px-3 py-1.5 rounded-full hover:bg-[var(--purple-light)] hover:text-[var(--purple)] transition-colors focus-ring whitespace-nowrap">{c.name}</a>
+      ))}
+      {rest.length>0 && (
+        <div ref={wrapRef} className="relative">
+          <button type="button" onClick={()=>setMoreOpen(v=>!v)} aria-expanded={moreOpen}
+            className={"px-3 py-1.5 rounded-full transition-colors focus-ring flex items-center gap-1 whitespace-nowrap "+(moreOpen?'bg-[var(--purple-light)] text-[var(--purple)]':'hover:bg-[var(--purple-light)] hover:text-[var(--purple)]')}>
+            More <span className={"inline-block transition-transform text-[10px] "+(moreOpen?'rotate-180':'')}>▾</span>
+          </button>
+          {moreOpen && (
+            <div className="absolute top-full left-0 mt-2 bg-white rounded-2xl shadow-xl border border-[var(--line)] py-2 min-w-[190px] z-50 pop">
+              {rest.map(c=> (
+                <a key={c.id} href={"#/category/"+c.id} onClick={()=>setMoreOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2 text-sm font-semibold hover:bg-[var(--purple-light)] hover:text-[var(--purple)] focus-ring">
+                  <span className="text-base">{c.icon}</span>{c.name}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </nav>
+  );
+}
+
 function DesktopHeader({route}){
   const {categories} = useApp();
   return (
     <div className="desktop-only sticky top-0 z-40 glass-header border-b border-[var(--line)]">
-      <div className="container-max flex items-center gap-8 px-8 py-3.5">
+      <div className="container-max flex items-center gap-5 px-8 py-3.5">
         <GreetingBlock />
-        <nav className="flex items-center gap-6 text-sm font-semibold text-[var(--ink)]">
-          <a href="#/home" className="hover:text-[var(--purple)] focus-ring">Home</a>
-          {categories.map(c=> <a key={c.id} href={"#/category/"+c.id} className="hover:text-[var(--purple)] focus-ring">{c.name}</a>)}
-        </nav>
-        <div className="flex-1 max-w-md ml-4"><SearchBar /></div>
+        <CategoryNavPills />
+        <div className="flex-1 max-w-md ml-2"><SearchBar /></div>
         <div className="flex items-center gap-3 ml-auto">
           <a href="#/wishlist" aria-label="Wishlist" className="w-9 h-9 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Heart /></a>
           <a href="#/account" className="flex items-center gap-1.5 text-sm font-semibold hover:text-[var(--purple)] focus-ring">
