@@ -178,8 +178,6 @@
   @keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
   .glass-header{background:rgba(255,255,255,.72); backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%);}
   html.dark .glass-header{background:rgba(6,6,8,.78);}
-  .page-transition{animation:pageTransitionIn .38s cubic-bezier(.22,.9,.32,1);}
-  @keyframes pageTransitionIn{from{opacity:0;transform:translateY(10px) scale(.99);}to{opacity:1;transform:translateY(0) scale(1);}}
   @media (prefers-reduced-motion: reduce){ .page-transition{animation:none;} }
 
   /* Floating bottom nav */
@@ -199,10 +197,31 @@
     transition:all .38s cubic-bezier(.34,1.56,.64,1);
   }
   .nav-item.active .nav-icon{
-    background:var(--purple-light);
+    background:linear-gradient(135deg, var(--purple), #9B6FFF);
+    color:#fff;
     transform:translateY(-12px) scale(1.45);
-    box-shadow:0 8px 16px rgba(108,63,197,0.28);
+    box-shadow:0 0 0 4px var(--purple-light), 0 8px 20px -2px rgba(108,63,197,0.55);
+    animation:navGlowPulse 2.2s ease-in-out infinite;
   }
+  @keyframes navGlowPulse{
+    0%,100%{box-shadow:0 0 0 4px var(--purple-light), 0 8px 20px -2px rgba(108,63,197,0.55);}
+    50%{box-shadow:0 0 0 6px var(--purple-light), 0 10px 26px -2px rgba(108,63,197,0.7);}
+  }
+  @media (prefers-reduced-motion: reduce){ .nav-item.active .nav-icon{animation:none;} }
+  .category-ring{position:relative;}
+  .category-ring::before{
+    content:'';position:absolute;inset:-3px;border-radius:inherit;z-index:-1;
+    background:conic-gradient(from 0deg, var(--purple), #9B6FFF, var(--amber), var(--green), var(--purple));
+    opacity:0;transition:opacity .3s ease;animation:ringSpin 3s linear infinite;
+  }
+  .category-ring:hover::before, .category-ring:focus-visible::before, .group:hover .category-ring::before{opacity:1;}
+  @keyframes ringSpin{to{transform:rotate(360deg);}}
+  @media (prefers-reduced-motion: reduce){ .category-ring::before{animation:none;} }
+  @keyframes cartSheetIn{from{transform:translateY(60px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  @keyframes cartSheetOut{from{transform:translateY(0);opacity:1;}to{transform:translateY(60px);opacity:0;}}
+  .cart-sheet-in{animation:cartSheetIn .3s cubic-bezier(.22,.9,.32,1);}
+  .cart-sheet-out{animation:cartSheetOut .24s cubic-bezier(.4,0,1,1);}
+  @media (prefers-reduced-motion: reduce){ .cart-sheet-in,.cart-sheet-out{animation:none;} }
   .nav-item:active{transform:scale(.88);}
   .page-transition{animation:pageIn .38s cubic-bezier(.22,.8,.32,1);}
   @keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.99);}to{opacity:1;transform:translateY(0) scale(1);}}
@@ -300,34 +319,6 @@ const DEFAULT_PRODUCTS = [
 
 const uid = () => Math.random().toString(36).slice(2,9);
 const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
-// Small "flying to cart" flourish when something's added — purely decorative, so any failure here
-// (element not found, layout not ready, etc.) is swallowed rather than ever blocking the actual
-// add-to-cart action. Lands on the cart icon, which already has its own arrival bounce/wiggle.
-function flyToCart(fromEl){
-  try{
-    // CartButton renders once per header (mobile + desktop), both present in the DOM at once —
-    // CSS just hides whichever doesn't match the viewport — so pick whichever instance is
-    // actually visible rather than assuming the first match in the DOM is the right one.
-    const candidates = document.querySelectorAll('.cart-fly-target');
-    let cartTarget = null;
-    for(const el of candidates){ const r = el.getBoundingClientRect(); if(r.width>0 && r.height>0){ cartTarget = el; break; } }
-    if(!cartTarget || !fromEl || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const fromRect = fromEl.getBoundingClientRect();
-    const toRect = cartTarget.getBoundingClientRect();
-    if(!fromRect.width || !toRect.width) return;
-    const flyer = document.createElement('div');
-    flyer.textContent = '🛍️';
-    flyer.style.cssText = `position:fixed;z-index:9999;left:${fromRect.left+fromRect.width/2-14}px;top:${fromRect.top+fromRect.height/2-14}px;width:28px;height:28px;font-size:20px;line-height:28px;text-align:center;pointer-events:none;transition:transform .55s cubic-bezier(.3,.6,.3,1), opacity .5s ease .2s;will-change:transform,opacity;`;
-    document.body.appendChild(flyer);
-    requestAnimationFrame(()=>{
-      const dx = (toRect.left+toRect.width/2) - (fromRect.left+fromRect.width/2);
-      const dy = (toRect.top+toRect.height/2) - (fromRect.top+fromRect.height/2);
-      flyer.style.transform = `translate(${dx}px, ${dy}px) scale(.25) rotate(20deg)`;
-      flyer.style.opacity = '0';
-    });
-    setTimeout(()=> flyer.remove(), 650);
-  } catch(e){ /* decorative only */ }
-}
 const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
 
 const DEFAULT_BANNERS = [
@@ -1222,7 +1213,7 @@ function ProductCard({product}){
           {product.stock<=0 ? (
             <button disabled className="w-full py-1.5 text-sm rounded-lg bg-gray-100 text-gray-400 font-semibold cursor-not-allowed">Out of Stock</button>
           ) : !line ? (
-            <button onClick={(e)=>{ addToCart(product.id,1); flyToCart(e.currentTarget); }}
+            <button onClick={()=>addToCart(product.id,1)}
               className="btn-primary w-full py-1.5 text-sm flex items-center justify-center gap-1 focus-ring">
               <span>+</span> Add
             </button>
@@ -1266,7 +1257,7 @@ function ProductListRow({product}){
         {product.stock<=0 ? (
           <span className="text-xs font-semibold text-gray-400 px-3 py-1.5">Out of Stock</span>
         ) : !line ? (
-          <button onClick={(e)=>{ addToCart(product.id,1); flyToCart(e.currentTarget); }} className="btn-primary px-3 py-1.5 text-xs focus-ring">+ Add</button>
+          <button onClick={()=>addToCart(product.id,1)} className="btn-primary px-3 py-1.5 text-xs focus-ring">+ Add</button>
         ) : (
           <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(product.id,q)} max={product.stock} small />
         )}
@@ -1345,6 +1336,7 @@ function Toast(){
 function CartButton(){
   const {cartCount} = useApp();
   const [bounce, setBounce] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const prevCount = useRef(cartCount);
   useEffect(()=>{
     if(cartCount !== prevCount.current){
@@ -1355,10 +1347,79 @@ function CartButton(){
     }
   },[cartCount]);
   return (
-    <a href="#/cart" className="cart-fly-target relative w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring" aria-label="Cart">
-      <span className={"inline-block "+(bounce?'wiggle':'')}><Icon.Cart /></span>
-      {cartCount>0 && <span className={"absolute -top-1 -right-1 bg-[var(--danger)] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center "+(bounce?'pulse':'')}>{cartCount}</span>}
-    </a>
+    <>
+      <button type="button" onClick={()=>setSheetOpen(true)} aria-label="Cart" className="relative w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring">
+        <span className={"inline-block "+(bounce?'wiggle':'')}><Icon.Cart /></span>
+        {cartCount>0 && <span className={"absolute -top-1 -right-1 bg-[var(--danger)] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center "+(bounce?'pulse':'')}>{cartCount}</span>}
+      </button>
+      <CartPreviewSheet open={sheetOpen} onClose={()=>setSheetOpen(false)} />
+    </>
+  );
+}
+
+// Frosted glass bottom sheet — tapping the cart icon now previews what's inside instead of
+// navigating straight to the full cart page (still reachable via "View Cart" here, or directly).
+function CartPreviewSheet({open, onClose}){
+  const {cartLines, setCartQty, total} = useApp();
+  const [closing, setClosing] = useState(false);
+
+  const requestClose = useCallback(()=>{
+    setClosing(true);
+    setTimeout(()=>{ setClosing(false); onClose(); }, 240);
+  },[onClose]);
+
+  useEffect(()=>{
+    if(!open) return;
+    document.body.style.overflow = 'hidden';
+    const onEsc = (e)=>{ if(e.key==='Escape') requestClose(); };
+    document.addEventListener('keydown', onEsc);
+    return ()=>{ document.body.style.overflow=''; document.removeEventListener('keydown', onEsc); };
+  },[open, requestClose]);
+
+  if(!open) return null;
+  const itemCount = cartLines.reduce((s,c)=>s+c.qty,0);
+
+  return (
+    <div className="fixed inset-0 z-[190] flex items-end sm:items-center sm:justify-center" onClick={requestClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm fade-in"></div>
+      <div onClick={e=>e.stopPropagation()}
+        className={"relative w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden border border-[var(--line)] flex flex-col "+(closing?'cart-sheet-out':'cart-sheet-in')}
+        style={{background:'rgba(255,255,255,0.94)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', maxHeight:'85vh'}}>
+        <div className="flex items-center justify-center pt-2.5 sm:hidden flex-shrink-0"><div className="w-10 h-1.5 bg-gray-300 rounded-full"></div></div>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--line)] flex-shrink-0">
+          <div className="font-display font-bold text-base">Your Cart {itemCount>0 && `(${itemCount})`}</div>
+          <button onClick={requestClose} aria-label="Close cart preview" className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center focus-ring"><Icon.Close/></button>
+        </div>
+        {cartLines.length===0 ? (
+          <div className="p-8 text-center text-sm text-[var(--muted)]">
+            <div className="text-4xl mb-2">🛒</div>
+            Your cart is empty.
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3 min-h-0">
+              {cartLines.map(line=> (
+                <div key={line.id} className="flex gap-3 items-center">
+                  <a href={"#/product/"+line.id} onClick={requestClose} className="flex-shrink-0"><ProductImg product={line.product} className="w-12 h-12 text-lg rounded-lg" /></a>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold line-clamp-1">{line.product.name}</div>
+                    <div className="text-xs font-bold mt-0.5">{inr(line.product.price)}</div>
+                  </div>
+                  <QuantitySelector qty={line.qty} onChange={(q)=>setCartQty(line.id,q)} max={line.product.stock} small />
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-[var(--line)] px-5 py-3 flex-shrink-0">
+              <div className="flex justify-between text-sm mb-3"><span className="text-[var(--muted)]">Total</span><span className="font-bold text-base"><CountUp value={total} formatFn={inr} /></span></div>
+              <div className="flex gap-2">
+                <a href="#/cart" onClick={requestClose} className="btn-secondary flex-1 py-2.5 text-sm text-center focus-ring">View Cart</a>
+                <a href="#/checkout/address" onClick={requestClose} className="btn-primary flex-1 py-2.5 text-sm text-center focus-ring">Checkout</a>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1395,35 +1456,124 @@ function useVoiceSearch(onResult){
   return { listening, start, supported: !!SR };
 }
 
-function SearchBar({autoFocus, onSubmitGo}){
-  const [q,setQ] = useState(()=> parseRoute(window.location.hash).query.q || '');
-  const submit = (e)=>{
-    e.preventDefault();
-    if(q.trim()) navigate('#/search?q='+encodeURIComponent(q.trim()));
-    if(onSubmitGo) onSubmitGo();
-  };
-  const {listening, start} = useVoiceSearch((transcript)=>{
-    setQ(transcript);
-    navigate('#/search?q='+encodeURIComponent(transcript));
-    if(onSubmitGo) onSubmitGo();
-  });
+// Full-screen "command palette" style search — replaces the old inline dropdown with a proper
+// overlay: instant results, quick category shortcuts when empty, voice search, and Esc/backdrop to
+// close. Shared by both the mobile search icon and the desktop search bar.
+function SearchPalette({open, onClose}){
+  const [query, setQuery] = useState('');
+  const inputRef = useRef(null);
+  const {products, categories} = useApp();
+
+  useEffect(()=>{
+    if(open){
+      setQuery('');
+      document.body.style.overflow = 'hidden';
+      const t = setTimeout(()=> inputRef.current && inputRef.current.focus(), 60);
+      return ()=>{ clearTimeout(t); };
+    }
+    document.body.style.overflow = '';
+  },[open]);
+
+  useEffect(()=>{
+    if(!open) return;
+    const onKey = (e)=>{ if(e.key==='Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return ()=> document.removeEventListener('keydown', onKey);
+  },[open, onClose]);
+
+  const runSearch = ()=>{ if(query.trim()){ navigate('#/search?q='+encodeURIComponent(query.trim())); onClose(); } };
+  const {listening, start} = useVoiceSearch((transcript)=>{ setQuery(transcript); navigate('#/search?q='+encodeURIComponent(transcript)); onClose(); });
+
+  if(!open) return null;
+
+  const term = query.trim().toLowerCase();
+  const results = term ? products.filter(p=>
+    p.name.toLowerCase().includes(term) || p.category.toLowerCase().includes(term) || p.brand.toLowerCase().includes(term)
+  ).slice(0,8) : [];
+
   return (
-    <form onSubmit={submit} className="flex-1 flex items-center bg-[#F5F2FB] rounded-xl px-3 py-2 gap-2">
-      <span className="text-[var(--muted)]"><Icon.Search /></span>
-      <input autoFocus={autoFocus} value={q} onChange={e=>setQ(e.target.value)}
-        placeholder="Search for toys, stationery, art supplies..."
-        className="bg-transparent outline-none text-sm w-full placeholder-[var(--muted)]" />
-      <button type="button" aria-label={listening ? "Stop voice search" : "Search by voice"} onClick={start}
-        className={"w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center focus-ring transition-colors "+(listening ? 'bg-[var(--danger)] text-white animate-pulse' : 'text-[var(--muted)] hover:bg-[var(--purple-light)] hover:text-[var(--purple)]')}>
-        <Icon.Mic />
+    <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[10vh] px-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm fade-in"></div>
+      <div onClick={e=>e.stopPropagation()}
+        className="pop relative w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-[var(--line)]"
+        style={{background:'rgba(255,255,255,0.94)', backdropFilter:'blur(18px)', WebkitBackdropFilter:'blur(18px)'}}>
+        <form onSubmit={e=>{e.preventDefault(); runSearch();}} className="flex items-center gap-3 px-5 py-4 border-b border-[var(--line)]">
+          <span className="text-[var(--muted)] flex-shrink-0"><Icon.Search /></span>
+          <input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)}
+            placeholder="Search products, categories, brands..."
+            className="flex-1 bg-transparent outline-none text-base min-w-0" />
+          <button type="button" aria-label={listening?"Stop voice search":"Search by voice"} onClick={start}
+            className={"w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center focus-ring transition-colors "+(listening?'bg-[var(--danger)] text-white animate-pulse':'text-[var(--muted)] hover:bg-[var(--purple-light)] hover:text-[var(--purple)]')}>
+            <Icon.Mic />
+          </button>
+          <button type="button" onClick={onClose} aria-label="Close search"
+            className="hidden sm:flex flex-shrink-0 text-[10px] font-bold text-[var(--muted)] border border-[var(--line)] rounded-md px-1.5 py-1 hover:bg-gray-50 focus-ring">ESC</button>
+        </form>
+        <div className="max-h-[60vh] overflow-y-auto">
+          {!term ? (
+            <div className="p-5">
+              <div className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wide mb-2.5">Browse Categories</div>
+              <div className="grid grid-cols-3 gap-2">
+                {categories.slice(0,6).map(c=> (
+                  <a key={c.id} href={"#/category/"+c.id} onClick={onClose}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-[var(--purple-light)] transition-colors focus-ring">
+                    <span className="text-2xl">{c.icon}</span>
+                    <span className="text-[11px] font-semibold text-center">{c.name}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : results.length ? (
+            <div className="py-2">
+              {results.map(p=> (
+                <a key={p.id} href={"#/product/"+p.id} onClick={onClose}
+                  className="flex items-center gap-3 px-5 py-2.5 hover:bg-[var(--purple-light)] transition-colors focus-ring">
+                  <ProductImg product={p} className="w-10 h-10 text-lg rounded-lg flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold line-clamp-1">{p.name}</div>
+                    <div className="text-xs text-[var(--muted)]">{inr(p.price)}</div>
+                  </div>
+                </a>
+              ))}
+              <button onClick={runSearch} className="w-full text-left px-5 py-3 text-sm font-bold text-[var(--purple)] hover:bg-[var(--purple-light)] border-t border-[var(--line)] focus-ring">
+                See all results for "{query}" →
+              </button>
+            </div>
+          ) : (
+            <div className="p-8 text-center text-sm text-[var(--muted)]">No matches for "{query}"</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SearchBar({autoFocus, onSubmitGo}){
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(()=>{
+    const onKey = (e)=>{
+      if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); setPaletteOpen(true); }
+    };
+    document.addEventListener('keydown', onKey);
+    return ()=> document.removeEventListener('keydown', onKey);
+  },[]);
+  return (
+    <>
+      <button type="button" onClick={()=>setPaletteOpen(true)}
+        className="flex-1 flex items-center bg-[#F5F2FB] rounded-xl px-3 py-2 gap-2 text-left hover:bg-[var(--purple-light)] transition-colors focus-ring">
+        <span className="text-[var(--muted)] flex-shrink-0"><Icon.Search /></span>
+        <span className="text-sm text-[var(--muted)] flex-1 truncate">Search for toys, stationery, art supplies...</span>
+        <span className="text-[10px] font-bold text-[var(--muted)] border border-[var(--line)] rounded-md px-1.5 py-0.5 flex-shrink-0">⌘K</span>
       </button>
-    </form>
+      <SearchPalette open={paletteOpen} onClose={()=>{ setPaletteOpen(false); if(onSubmitGo) onSubmitGo(); }} />
+    </>
   );
 }
 
 function MobileHeader({route}){
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(route.parts[0]==='search');
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState(()=> parseRoute(window.location.hash).query.q || '');
   const [focused, setFocused] = useState(false);
   const {products} = useApp();
@@ -1489,7 +1639,7 @@ function MobileHeader({route}){
           {!searchOpen && <GreetingBlock />}
           <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
             {!searchOpen ? (
-              <button aria-label="Search" onClick={()=>setSearchOpen(true)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Search /></button>
+              <button aria-label="Search" onClick={()=>setPaletteOpen(true)} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Search /></button>
             ) : (
               <button aria-label="Close search" onClick={closeSearch} className="w-10 h-10 rounded-full hover:bg-[var(--purple-light)] flex items-center justify-center focus-ring"><Icon.Close /></button>
             )}
@@ -1517,6 +1667,7 @@ function MobileHeader({route}){
       )}
 
       <MobileMenu open={menuOpen} onClose={()=>setMenuOpen(false)} />
+      <SearchPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} />
     </div>
   );
 }
@@ -2193,8 +2344,8 @@ function HomePage(){
       <div className="px-4 md:container-max md:mx-auto mt-6">
         <div className="flex gap-4 overflow-x-auto scrollbar-none pb-1 md:grid md:grid-cols-6 md:gap-4">
           {categories.map(c=> (
-            <a key={c.id} href={"#/category/"+c.id} className="flex flex-col items-center gap-1.5 min-w-[76px] md:min-w-0 focus-ring">
-              <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-3xl" style={{background:c.color}}>{c.icon}</div>
+            <a key={c.id} href={"#/category/"+c.id} className="group flex flex-col items-center gap-1.5 min-w-[76px] md:min-w-0 focus-ring">
+              <div className="category-ring w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-3xl transition-transform group-hover:scale-105" style={{background:c.color}}>{c.icon}</div>
               <span className="text-xs font-semibold text-center">{c.name}</span>
             </a>
           ))}
@@ -2606,7 +2757,7 @@ function ProductPage({route}){
               <button disabled className="flex-1 py-3 text-sm rounded-lg bg-gray-100 text-gray-400 font-semibold cursor-not-allowed">Out of Stock</button>
             ) : (
               <React.Fragment>
-                <button onClick={(e)=>{ addToCart(product.id, qty); flyToCart(e.currentTarget); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
+                <button onClick={()=>{ addToCart(product.id, qty); if(selectedVariant) showToast('Added '+selectedVariant.label+' to cart','🛒'); }} className="btn-primary flex-1 py-3 text-sm focus-ring">🛒 Add to Cart</button>
                 <button onClick={()=>{ addToCart(product.id, qty); navigate('#/checkout/address'); }} className="btn-secondary flex-1 py-3 text-sm focus-ring">Buy Now</button>
               </React.Fragment>
             )}
@@ -2679,17 +2830,44 @@ function FreeDeliveryBar(){
   );
 }
 
+// Smoothly animates a number from its previous value to a new one (ease-out) instead of just
+// popping to the new figure — used for prices/totals that change as the cart updates.
+function CountUp({value, formatFn}){
+  const [display, setDisplay] = useState(value);
+  const prevRef = useRef(value);
+  const rafRef = useRef(null);
+  const reduceMotion = typeof window!=='undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  useEffect(()=>{
+    const from = prevRef.current;
+    const to = value;
+    if(reduceMotion || from===to){ setDisplay(to); prevRef.current = to; return; }
+    const duration = 450;
+    const start = performance.now();
+    cancelAnimationFrame(rafRef.current);
+    const tick = (now)=>{
+      const t = Math.min(1, (now-start)/duration);
+      const eased = 1 - Math.pow(1-t, 3);
+      setDisplay(from + (to-from)*eased);
+      if(t<1) rafRef.current = requestAnimationFrame(tick);
+      else { setDisplay(to); prevRef.current = to; }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return ()=> cancelAnimationFrame(rafRef.current);
+  },[value]);
+  return <>{formatFn ? formatFn(display) : Math.round(display)}</>;
+}
+
 function PriceSummary({showCheckoutButton}){
   const {subtotal, savings, deliveryCharge, packagingCharge, total, cartLines} = useApp();
   return (
     <div className="card p-4">
       <div className="font-bold text-sm mb-3">Price Details</div>
-      <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Subtotal ({cartLines.reduce((s,c)=>s+c.qty,0)} items)</span><span>{inr(subtotal)}</span></div>
+      <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Subtotal ({cartLines.reduce((s,c)=>s+c.qty,0)} items)</span><span><CountUp value={subtotal} formatFn={inr} /></span></div>
       <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Delivery Charge</span><span className={deliveryCharge===0?'text-[var(--green)] font-semibold':''}>{deliveryCharge===0?'FREE':inr(deliveryCharge)}</span></div>
       <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Packaging Charge</span><span>{inr(packagingCharge)}</span></div>
-      {savings>0 && <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Discount</span><span className="text-[var(--green)]">-{inr(savings)}</span></div>}
+      {savings>0 && <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Discount</span><span className="text-[var(--green)]">-<CountUp value={savings} formatFn={inr} /></span></div>}
       <div className="border-t border-dashed border-[var(--line)] my-2"></div>
-      <div className="flex justify-between font-bold text-base py-1"><span>Total Amount</span><span>{inr(total)}</span></div>
+      <div className="flex justify-between font-bold text-base py-1"><span>Total Amount</span><span><CountUp value={total} formatFn={inr} /></span></div>
       {savings>0 && <div className="text-xs text-[var(--green)] font-semibold mt-1">You saved {inr(savings)} on this order 🎉</div>}
       {showCheckoutButton && (
         <a href="#/checkout/address" className="btn-primary w-full py-3 text-sm mt-4 text-center block focus-ring">Proceed to Checkout</a>
@@ -3159,6 +3337,54 @@ function MerakiPendingIcon(){
   );
 }
 
+// Lightweight canvas confetti — no library needed. Self-contained: mounts, bursts for ~2.6s, then
+// nothing (the canvas element itself stays but is empty/inert). Skipped entirely for
+// prefers-reduced-motion.
+function ConfettiBurst(){
+  const canvasRef = useRef(null);
+  useEffect(()=>{
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const canvas = canvasRef.current; if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const resize = ()=>{ canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    const colors = ['#6C3FC5','#9B6FFF','#F5A623','#1E9E5A','#FF5C7A','#3FA7F5'];
+    const particles = Array.from({length:90}, ()=>({
+      x: Math.random()*canvas.width,
+      y: -20 - Math.random()*canvas.height*0.4,
+      w: 6+Math.random()*6,
+      h: 8+Math.random()*8,
+      color: colors[Math.floor(Math.random()*colors.length)],
+      vx: (Math.random()-0.5)*3,
+      vy: 2+Math.random()*3,
+      rot: Math.random()*360,
+      vr: (Math.random()-0.5)*10,
+    }));
+    let raf, start=null;
+    const duration = 2600;
+    const tick = (t)=>{
+      if(!start) start=t;
+      const elapsed = t-start;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      particles.forEach(p=>{
+        p.x += p.vx; p.y += p.vy; p.vy += 0.04; p.rot += p.vr;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot*Math.PI/180);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+        ctx.restore();
+      });
+      if(elapsed < duration) raf = requestAnimationFrame(tick);
+      else ctx.clearRect(0,0,canvas.width,canvas.height);
+    };
+    raf = requestAnimationFrame(tick);
+    window.addEventListener('resize', resize);
+    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  },[]);
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-[9998]" aria-hidden="true" />;
+}
+
 function OrderConfirmationPage({route}){
   const orderId = route.parts[1];
   const {orders, products, verifyOrderPayment} = useApp();
@@ -3173,6 +3399,7 @@ function OrderConfirmationPage({route}){
 
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-8 max-w-lg md:max-w-2xl mx-auto text-center">
+      {!isPending && <ConfettiBurst />}
       {isPending ? <MerakiPendingIcon /> : <MerakiCheckIcon />}
       {isPending ? (
         <React.Fragment>
