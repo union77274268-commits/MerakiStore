@@ -909,7 +909,14 @@ function AppProvider({children}){
       quantity: c.qty, unit_price: c.product.price, discount: 0, total: c.product.price*c.qty,
     }));
     const { error: itemsErr } = await sb.from('online_order_items').insert(itemRows);
-    if(itemsErr) console.error('Failed to insert order items', itemsErr);
+    if(itemsErr){
+      // Never leave a confirmed-looking order behind with no items in it (that's what silently
+      // happened when the stock trigger broke) — roll the order back and tell the customer.
+      console.error('Failed to insert order items', itemsErr);
+      await sb.from('online_orders').delete().eq('id', orderRow.id);
+      showToast("Couldn't place your order — nothing was charged. Please try again.", '⚠️');
+      return { error: itemsErr };
+    }
 
     const { error: payErr } = await sb.from('online_payments').insert({
       order_id: orderRow.id, amount: total, method: paymentLabel,
@@ -2878,6 +2885,8 @@ function NotifyMeButton({product}){
 // for a companion product from the same category. Picks the first in-stock candidate.
 function FrequentlyBoughtTogether({product, candidates}){
   const {addToCart, cart} = useApp();
+  // Both halves of the bundle must be in stock — otherwise "Add Both" would silently add only one.
+  if(product.stock<=0) return null;
   const companion = candidates.find(p=> p.id!==product.id && p.stock>0);
   if(!companion) return null;
   const alreadyHaveBoth = cart.some(c=>c.id===product.id) && cart.some(c=>c.id===companion.id);
@@ -3855,9 +3864,10 @@ function OrdersPage(){
 
 function OrderDetailPage({route}){
   const orderId = route.parts[1];
-  const {orders, storeSettings} = useApp();
+  const {orders, storeSettings, productMap} = useApp();
   const order = orders.find(o=>o.id===orderId);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [reviewProduct, setReviewProduct] = useState(null);
   if(!order) return <div className="p-8 text-center text-[var(--muted)]">Order not found. <a className="text-[var(--purple)] font-semibold" href="#/orders">Back to orders</a></div>;
   const steps = order.statusSteps;
   return (
@@ -3897,6 +3907,9 @@ function OrderDetailPage({route}){
             <div className="w-11 h-11 rounded-lg placeholder-img text-lg" style={{background:it.bg}}>{it.emoji}</div>
             <div className="flex-1 text-sm">{it.name} <span className="text-[var(--muted)]">x{it.qty}</span></div>
             <div className="text-sm font-bold">{inr(it.price*it.qty)}</div>
+            {order.status==='Delivered' && productMap[it.id] && (
+              <button onClick={()=>setReviewProduct(productMap[it.id])} className="text-xs font-bold text-[var(--purple)] border border-[var(--purple)] rounded-full px-2.5 py-1 focus-ring flex-shrink-0">⭐ Rate</button>
+            )}
           </div>
         ))}
         <div className="border-t border-dashed border-[var(--line)] my-2"></div>
@@ -3919,6 +3932,7 @@ function OrderDetailPage({route}){
       </button>
 
       {helpOpen && <HelpSupportModal onClose={()=>setHelpOpen(false)} />}
+      {reviewProduct && <ReviewsModal product={reviewProduct} onClose={()=>setReviewProduct(null)} />}
     </div>
   );
 }
