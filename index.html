@@ -400,6 +400,7 @@ function mapDbOrder(row, productMap){
       price: Number(it.unit_price),
       emoji: known ? known.emoji : '📦',
       bg: known ? known.bg : '#F1EBFB',
+      image: known ? known.image : null,
     };
   });
   const payment = (row.online_payments && row.online_payments[0]) || null;
@@ -3845,7 +3846,7 @@ function OrdersPage(){
               <Badge tone={statusColor(o.status)}>{o.status}</Badge>
             </div>
             <div className="flex gap-1.5 mt-3">
-              {o.items.slice(0,4).map(it=> <div key={it.id} className="w-9 h-9 rounded-lg placeholder-img text-base" style={{background:it.bg}}>{it.emoji}</div>)}
+              {o.items.slice(0,4).map((it,i)=> <ProductImg key={it.id+'-'+i} product={it} className="w-9 h-9 rounded-lg text-base" />)}
               {o.items.length>4 && <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] font-bold text-[var(--muted)]">+{o.items.length-4}</div>}
             </div>
             <div className="flex justify-between items-center mt-3">
@@ -3904,7 +3905,7 @@ function OrderDetailPage({route}){
         <div className="font-bold text-sm mb-2">Items</div>
         {order.items.map(it=> (
           <div key={it.id} className="flex items-center gap-3 py-2">
-            <div className="w-11 h-11 rounded-lg placeholder-img text-lg" style={{background:it.bg}}>{it.emoji}</div>
+            <ProductImg product={it} className="w-11 h-11 rounded-lg text-lg flex-shrink-0" />
             <div className="flex-1 text-sm">{it.name} <span className="text-[var(--muted)]">x{it.qty}</span></div>
             <div className="text-sm font-bold">{inr(it.price*it.qty)}</div>
             {order.status==='Delivered' && productMap[it.id] && (
