@@ -393,6 +393,7 @@ const DEFAULT_STORE_SETTINGS = {
   area:'Kalwar Road', city:'Jaipur', pincode:'302012',
   phone:'8302416181', email:'hello@merakistore.in',
   hoursWeekday:'10:00 AM – 9:30 PM', hoursSunday:'10:00 AM – 2:00 PM',
+  chatbotEnabled:true,
 };
 
 // Maps a row from the real `storefront_products` view (your actual POS
@@ -497,6 +498,7 @@ function mapDbStoreSettings(row){
     email: row.email,
     hoursWeekday: row.hours_weekday,
     hoursSunday: row.hours_sunday,
+    chatbotEnabled: row.chatbot_enabled !== false,
   };
 }
 
@@ -3088,6 +3090,8 @@ function ProductPage({route}){
         </div>
       </div>
 
+      <ProductExtraSections product={product} />
+
       <FrequentlyBoughtTogether product={product} candidates={related} />
 
       {related.length>0 && (
@@ -3116,11 +3120,136 @@ function ProductPage({route}){
         </div>
       )}
 
+      <ProductMoreRows product={product} excludeIds={[...related, ...moreFromBrand].map(p=>p.id)} />
+
+      <div className="mt-8 text-center">
+        <a href={"#/category/"+product.category} className="btn-secondary inline-block px-6 py-2.5 text-sm font-semibold focus-ring">Browse all in {product.categoryLabel} ›</a>
+      </div>
+
       {shareOpen && <ShareSheetModal product={product} onClose={()=>setShareOpen(false)} />}
       {reviewsOpen && <ReviewsModal product={product} onClose={()=>setReviewsOpen(false)} />}
       {locationOpen && <ChangeLocationModal onClose={()=>setLocationOpen(false)} />}
     </div>
   );
+}
+
+
+/* Extra product-page sections: details table, delivery & returns, real reviews preview, ask-the-assistant,
+   then personalised / recently-viewed shelves. Everything here is real data — nothing invented. */
+function ProductExtraSections({product}){
+  const {storeSettings, orders, products} = useApp();
+  const [reviews, setReviews] = useState(null);
+  const [openFaq, setOpenFaq] = useState(-1);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
+  useEffect(()=>{
+    let alive = true;
+    setReviews(null);
+    sb.from('product_reviews').select('*').eq('product_id', product.id).order('created_at', {ascending:false}).limit(3)
+      .then(({data, error})=>{ if(alive) setReviews(error ? [] : (data||[])); });
+    return ()=>{ alive = false; };
+  },[product.id]);
+  const botOn = storeSettings.chatbotEnabled!==false;
+  const sameCat = products.filter(p=>p.category===product.category);
+  const prices = sameCat.map(p=>p.price);
+  const details = [
+    ['Brand', product.brand && product.brand!=='Generic' ? product.brand : null],
+    ['Category', product.categoryLabel],
+    ['Type', product.subcategory],
+    ['Availability', product.stock<=0 ? 'Out of stock' : product.stock<=5 ? 'Only '+product.stock+' left' : 'In stock'],
+    ['Price', inr(product.price)+' (inclusive of all taxes)'],
+    ['MRP', product.discount>0 ? inr(product.mrp) : null],
+    ['Delivery', 'Home delivery or store pickup'],
+  ].filter(r=>r[1]);
+  const faqs = [
+    {q:'How fast can I get this?', a:'Most Jaipur orders arrive within 2–4 hours. Choose Store Pickup at checkout and it will be ready at our '+storeSettings.area+' store, usually within 2 hours.'},
+    {q:'What are the delivery charges?', a:'Delivery is '+inr(DELIVERY_CHARGE)+', and free on orders of '+inr(FREE_DELIVERY_THRESHOLD)+' or more. There is also a '+inr(PACKAGING_CHARGE)+' packaging charge.'},
+    {q:'Can I return it?', a:'Unused items in original packaging can be returned within 7 days of delivery. Refunds go back to your original payment method in 3–5 business days.'},
+    {q:'Can I pick it up from the shop?', a:'Yes — '+[storeSettings.addressLine, storeSettings.area, storeSettings.city].filter(Boolean).join(', ')+'. Open '+storeSettings.hoursWeekday+' (Sunday '+storeSettings.hoursSunday+').'},
+  ];
+  return (
+    <div className="mt-8 space-y-6">
+      <div>
+        <div className="font-bold text-lg mb-3 font-display">Product details</div>
+        <div className="card overflow-hidden">
+          {details.map(([k,v],i)=> (
+            <div key={k} className={"flex justify-between gap-4 px-4 py-2.5 text-sm "+(i%2===0?'bg-[var(--purple-light)]':'')}>
+              <span className="text-[var(--muted)]">{k}</span>
+              <span className="font-semibold text-right">{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-[11px] md:text-xs">
+        <div className="card p-3"><div className="text-xl">🚚</div><div className="font-bold mt-1">Fast delivery</div><div className="text-[var(--muted)]">Within 2–4 hrs</div></div>
+        <div className="card p-3"><div className="text-xl">🏬</div><div className="font-bold mt-1">Store pickup</div><div className="text-[var(--muted)]">Ready in ~2 hrs</div></div>
+        <div className="card p-3"><div className="text-xl">↩️</div><div className="font-bold mt-1">7-day returns</div><div className="text-[var(--muted)]">Unused items</div></div>
+        <div className="card p-3"><div className="text-xl">💜</div><div className="font-bold mt-1">2% rewards</div><div className="text-[var(--muted)]">On delivered orders</div></div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-bold text-lg font-display">Customer reviews</div>
+          <button onClick={()=>setReviewsOpen(true)} className="text-sm font-semibold text-[var(--purple)] focus-ring">{product.reviews>0 ? 'See all ›' : 'Write a review ›'}</button>
+        </div>
+        {reviews===null ? (
+          <div className="card p-4 text-sm text-[var(--muted)]">Loading reviews…</div>
+        ) : reviews.length===0 ? (
+          <div className="card p-4 text-sm text-[var(--muted)]">No reviews yet. Customers who've received this item can leave the first one from their order page.</div>
+        ) : (
+          <div className="space-y-2.5">
+            {reviews.map(r=> (
+              <div key={r.id} className="card p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">{r.customer_name || 'A Meraki shopper'}</div>
+                  <StarRating rating={r.rating} />
+                </div>
+                {r.comment && <p className="text-sm text-[var(--muted)] mt-1.5 leading-relaxed">{r.comment}</p>}
+                <div className="text-[11px] text-[var(--muted)] mt-1.5">{timeAgo(r.created_at)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="font-bold text-lg mb-3 font-display">Questions? 💬</div>
+        <div className="card divide-y divide-[var(--line)]">
+          {faqs.map((f,i)=> (
+            <div key={f.q}>
+              <button onClick={()=>setOpenFaq(openFaq===i?-1:i)} aria-expanded={openFaq===i} className="w-full flex items-center justify-between gap-3 text-left px-4 py-3 text-sm font-semibold focus-ring">
+                <span>{f.q}</span><span className="text-[var(--purple)] flex-shrink-0">{openFaq===i?'−':'+'}</span>
+              </button>
+              {openFaq===i && <div className="px-4 pb-3 text-sm text-[var(--muted)] leading-relaxed">{f.a}</div>}
+            </div>
+          ))}
+        </div>
+        {botOn && (
+          <button onClick={()=>window.dispatchEvent(new CustomEvent('meraki-open-bot',{detail:{prompt:'Tell me about '+product.name}}))}
+            className="btn-secondary w-full py-2.5 text-sm font-semibold mt-3 focus-ring">💬 Ask Meraki about this product</button>
+        )}
+      </div>
+      {reviewsOpen && <ReviewsModal product={product} onClose={()=>setReviewsOpen(false)} />}
+    </div>
+  );
+}
+
+function ProductMoreRows({product, excludeIds}){
+  const {productMap} = useApp();
+  const pers = usePersonalisation();
+  const recentIds = useRecentlyViewedIds();
+  const skip = new Set([product.id, ...excludeIds]);
+  const recent = recentIds.map(id=>productMap[id]).filter(p=>p && p.id!==product.id).slice(0,8);
+  const picks = pers.ranked.filter(p=>!skip.has(p.id)).slice(0,8);
+  const row = (title, list)=> list.length>0 && (
+    <div className="mt-8">
+      <div className="font-bold text-lg mb-3 font-display">{title}</div>
+      <div className="flex gap-3 overflow-x-auto scrollbar-none snap-x-row pb-1">
+        {list.map(p=> <div key={p.id} className="snap-item flex-shrink-0 w-[150px]"><ProductCard product={p} /></div>)}
+      </div>
+    </div>
+  );
+  return <>{row('Recently viewed 👀', recent)}{row('Picked for you ✨', picks)}</>;
 }
 
 /* ============================= CART PAGE ============================= */
@@ -5374,6 +5503,7 @@ function AdminSettings(){
       store_name: form.storeName, address_line: form.addressLine, area: form.area, city: form.city,
       pincode: form.pincode, phone: form.phone, email: form.email,
       hours_weekday: form.hoursWeekday, hours_sunday: form.hoursSunday,
+      chatbot_enabled: form.chatbotEnabled !== false,
     }).eq('owner_id', SHOP_OWNER_ID);
     setSaving(false);
     if(error){ showToast('Could not save settings','⚠️'); return; }
@@ -5410,6 +5540,18 @@ function AdminSettings(){
           {field('hoursWeekday','Weekday Hours')}
           {field('hoursSunday','Sunday Hours')}
         </div>
+        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[var(--purple-light)]">
+          <div className="min-w-0">
+            <div className="text-sm font-bold">💬 Meraki Assistant chatbot</div>
+            <div className="text-xs text-[var(--muted)]">Shows the "Ask Meraki" chat button to customers on the storefront.</div>
+          </div>
+          <button type="button" role="switch" aria-checked={form.chatbotEnabled!==false} aria-label="Enable chatbot"
+            onClick={()=>setForm({...form, chatbotEnabled: form.chatbotEnabled===false})}
+            className={"relative w-12 h-7 rounded-full flex-shrink-0 transition-colors focus-ring "+(form.chatbotEnabled!==false?'bg-[var(--green)]':'bg-gray-300')}>
+            <span className={"absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform "+(form.chatbotEnabled!==false?'translate-x-5':'')}></span>
+          </button>
+        </div>
+        <div className="text-[11px] text-[var(--muted)] -mt-1">{form.chatbotEnabled!==false?'Chatbot is ON':'Chatbot is OFF'} — tap Save to apply.</div>
         <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 mt-2 focus-ring">{saving ? 'Saving…' : 'Save Store Settings'}</button>
       </div>
     </div>
@@ -6085,7 +6227,7 @@ function BotProductRow({product:p, onAdd, onOpen}){
     </div>
   );
 }
-function MeraAssistant({hidden}){
+function MeraAssistant(){
   const app = useApp();
   const {products, productMap, categories, storeSettings, orders, cartLines, rewardBalance, loggedIn, customerProfile, addToCart} = app;
   const pers = usePersonalisation();
@@ -6134,10 +6276,14 @@ function MeraAssistant({hidden}){
     }, 380);
   },[addToCart]);
 
+  useEffect(()=>{
+    const onOpen = e=>{ setOpen(true); const q = e.detail && e.detail.prompt; if(q) setTimeout(()=>send(q), 450); };
+    window.addEventListener('meraki-open-bot', onOpen);
+    return ()=> window.removeEventListener('meraki-open-bot', onOpen);
+  },[send]);
   const voice = useVoiceSearch(useCallback(t=>send(t),[send]));
   const addFromCard = p => { addToCart(p.id, 1); setMsgs(m=>[...m, {id:++idRef.current, role:'bot', text:`Added **${p.name}** to your cart 🛒`, link:{label:'Open cart', href:'#/cart'}}]); };
 
-  if(hidden) return null;
   const lastBotId = [...msgs].reverse().find(m=>m.role==='bot');
   return ReactDOM.createPortal(
     <>
@@ -6192,7 +6338,7 @@ function MeraAssistant({hidden}){
 }
 
 function AppShell({route, hash}){
-  const {loggedIn, authLoading} = useApp();
+  const {loggedIn, authLoading, storeSettings} = useApp();
   useEffect(()=>{
     window.scrollTo({top:0, left:0, behavior:'auto'});
   },[hash]);
@@ -6220,7 +6366,7 @@ function AppShell({route, hash}){
       </div>
       {!isCheckoutOrConfirm && <div className="mobile-only h-14"></div>}
       {!isCheckoutOrConfirm && <BottomNav route={route} />}
-      <MeraAssistant hidden={isCheckoutOrConfirm} />
+      {storeSettings.chatbotEnabled!==false && !isCheckoutOrConfirm && <MeraAssistant />}
       <Toast />
     </div>
   );
