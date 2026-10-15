@@ -227,6 +227,50 @@
   @keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.99);}to{opacity:1;transform:translateY(0) scale(1);}}
   .wiggle{animation:wiggle .5s ease;}
   @keyframes wiggle{0%,100%{transform:rotate(0);}25%{transform:rotate(-12deg) scale(1.15);}60%{transform:rotate(10deg) scale(1.15);}}
+  /* ---- Counter assistant ---- */
+  .bot-fab{position:fixed;z-index:60;right:14px;bottom:calc(76px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;background:var(--purple);color:#fff;border:0;border-radius:999px;padding:12px 16px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 8px 22px -6px rgba(108,63,197,.55);}
+  .bot-fab:hover{background:var(--purple-dark);}
+  .bot-fab-label{display:none;}
+  @media (min-width:768px){ .bot-fab{right:24px;bottom:24px;} .bot-fab-label{display:inline;} }
+  html.force-mobile-layout .bot-fab{right:14px;bottom:calc(76px + env(safe-area-inset-bottom));}
+  html.force-mobile-layout .bot-fab-label{display:none;}
+  .bot-panel{position:fixed;z-index:210;display:flex;flex-direction:column;background:#fff;color:var(--ink);overflow:hidden;
+    left:0;right:0;bottom:0;height:min(82vh,640px);height:min(82dvh,640px);border-radius:22px 22px 0 0;border:1px solid var(--line);box-shadow:0 -12px 40px -8px rgba(36,26,56,.35);}
+  @media (min-width:768px){ .bot-panel{left:auto;right:24px;bottom:24px;width:390px;height:min(600px,calc(100vh - 48px));border-radius:22px;} }
+  html.force-mobile-layout .bot-panel{left:0;right:0;bottom:0;width:auto;height:min(82dvh,640px);border-radius:22px 22px 0 0;}
+  html.dark .bot-panel{background:#0c0c0e;border-color:#26262b;}
+  .bot-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;background:var(--purple);color:#fff;flex-shrink:0;}
+  .bot-avatar{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  .bot-close{background:rgba(255,255,255,.18);border:0;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;flex-shrink:0;}
+  .bot-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain;}
+  .bot-row{display:flex;flex-direction:column;gap:6px;max-width:100%;}
+  .bot-row.user{align-items:flex-end;}
+  .bot-row.bot{align-items:flex-start;}
+  .bot-bubble{max-width:88%;padding:9px 12px;border-radius:16px;font-size:13px;line-height:1.45;word-break:break-word;}
+  .bot-bubble.bot{background:var(--purple-light);border-bottom-left-radius:4px;}
+  .bot-bubble.user{background:var(--purple);color:#fff;border-bottom-right-radius:4px;}
+  .bot-prods{display:flex;flex-direction:column;gap:6px;width:100%;}
+  .bot-prod{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:14px;background:#fff;}
+  html.dark .bot-prod{background:#101012;border-color:#26262b;}
+  .bot-add{background:var(--purple);color:#fff;border:0;border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;}
+  .bot-add:disabled{background:#C9BEE5;cursor:not-allowed;}
+  .bot-link{font-size:12px;font-weight:700;color:var(--purple);text-decoration:none;padding:2px 4px;}
+  .bot-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .bot-chip{border:1px solid var(--line);background:#fff;color:var(--purple);border-radius:999px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;}
+  html.dark .bot-chip{background:#101012;border-color:#26262b;}
+  .bot-input{display:flex;align-items:center;gap:6px;padding:10px;border-top:1px solid var(--line);flex-shrink:0;padding-bottom:calc(10px + env(safe-area-inset-bottom));}
+  .bot-input input{flex:1;min-width:0;border:1px solid var(--line);border-radius:999px;padding:10px 14px;font-size:16px;outline:none;background:#fff;color:var(--ink);}
+  .bot-input input:focus{border-color:var(--purple);}
+  .bot-mic,.bot-send{border:0;border-radius:50%;width:38px;height:38px;cursor:pointer;flex-shrink:0;font-size:15px;}
+  .bot-mic{background:var(--purple-light);}
+  .bot-mic.listening{background:var(--danger);}
+  .bot-send{background:var(--purple);color:#fff;}
+  .bot-send:disabled{background:#C9BEE5;cursor:not-allowed;}
+  .bot-typing{display:flex;gap:4px;align-items:center;padding:12px 14px;}
+  .bot-typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:botdot 1s infinite ease-in-out;}
+  .bot-typing span:nth-child(2){animation-delay:.15s;} .bot-typing span:nth-child(3){animation-delay:.3s;}
+  @keyframes botdot{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+  @media (prefers-reduced-motion: reduce){ .bot-typing span{animation:none;opacity:.7;} }
 </style>
 </head>
 <body>
@@ -2274,9 +2318,9 @@ function shuffleArray(arr){
 
 // Shows products in batches with an explicit "Load more" button — capped at the catalog size
 // rather than looping forever, so the person decides when (and whether) to keep going.
-function ExploreMoreFeed({products}){
+function ExploreMoreFeed({products, ranked}){
   const BATCH = 12;
-  const [order] = useState(()=> shuffleArray(products));
+  const order = useMemo(()=> personalisedFeedOrder(products, ranked||[]), [products, ranked]);
   const [visibleCount, setVisibleCount] = useState(BATCH);
 
   if(!order.length) return null;
@@ -2445,6 +2489,7 @@ function HomePage(){
   const recommended = useMemo(()=> [...products].sort(()=>0.5-Math.random()).slice(0,8), [products]);
   const boughtTogether = useMemo(()=> products.filter(p=>['p1','p4','p6','p11'].includes(p.id)), [products]);
 
+  const pers = usePersonalisation();
   const recentIds = useRecentlyViewedIds();
   const recentlyViewed = useMemo(()=> recentIds.map(id=>products.find(p=>p.id===id)).filter(Boolean), [recentIds, products]);
 
@@ -2492,6 +2537,8 @@ function HomePage(){
         )}
       </div>
 
+      {pers.signal && pers.ranked.length>0 && <ProductRow title="Picked for you ✨" subtitle={pers.reason ? "Because you like "+pers.reason : "Based on your activity"} products={pers.ranked.slice(0,8)} />}
+      {pers.buyAgain.length>0 && <ProductRow title="Buy it again 🔁" subtitle="From your past orders" products={pers.buyAgain} />}
       <DealsStrip />
       <ProductRow title="Recently Viewed 👀" products={recentlyViewed} />
       <ProductRow title="New Arrivals 🆕" subtitle="Fresh on the shelves" products={newArrivals} loading={productsLoading} />
@@ -2502,7 +2549,7 @@ function HomePage(){
       {bannerThemedRows.map(row=> <ProductRow key={row.id} title={row.title} products={row.products} viewAllHref={"#/category/"+row.slug} />)}
       <ProductRow title="School Essentials 🎒" products={schoolEssentials} viewAllHref="#/category/notebooks-diaries" loading={productsLoading} />
       <ProductRow title="Frequently Bought Together" subtitle="A handy combo to grab in one go" products={boughtTogether} loading={productsLoading} />
-      <ProductRow title="Recommended For You 💜" products={recommended} loading={productsLoading} />
+      {!pers.signal && <ProductRow title="Recommended For You 💜" products={recommended} loading={productsLoading} />}
 
       <RevealOnScroll className="px-4 md:container-max md:mx-auto mt-8 grid grid-cols-3 gap-2 text-center text-[11px] md:text-sm">
         <div className="card p-3"><div className="text-xl">🚚</div><div className="font-bold mt-1">Fast Delivery</div><div className="text-[var(--muted)]">Within 2-4 hrs</div></div>
@@ -2510,7 +2557,7 @@ function HomePage(){
         <div className="card p-3"><div className="text-xl">🛡️</div><div className="font-bold mt-1">Safe Packaging</div><div className="text-[var(--muted)]">Carefully sealed</div></div>
       </RevealOnScroll>
 
-      {!productsLoading && <ExploreMoreFeed products={products} />}
+      {!productsLoading && <ExploreMoreFeed products={products} ranked={pers.ranked} />}
 
       <Footer />
     </div>
@@ -2568,6 +2615,7 @@ function CategoryPage({route}){
   const [view, setView] = useState('grid');
   const [subcat, setSubcat] = useState('');
 
+  useEffect(()=>{ if(routeParam) bumpInterest(routeParam, null, 1.5, 0); }, [routeParam]);
   useEffect(()=>{
     setPriceMax(null);
     setBrandFilter([]);
@@ -2931,6 +2979,7 @@ function ProductPage({route}){
 
   useEffect(()=>{ setQty(1); setVariantIdx(0); }, [id]);
   useEffect(()=>{ if(id) recordRecentlyViewed(id); }, [id]);
+  useEffect(()=>{ if(product) bumpInterest(product.category, product.brand, 2, 1); }, [product && product.id]);
 
   if(!product) return <div className="p-8 text-center text-[var(--muted)]">Product not found. <a className="text-[var(--purple)] font-semibold" href="#/home">Go home</a></div>;
 
@@ -5540,6 +5589,608 @@ function LoggedOutScreen(){
   );
 }
 
+/* ===== MERAKI COUNTER BOT ENGINE (pure functions, no React) ===== */
+const MerakiBot = (function(){
+  const STOP = new Set(('a an the is are was am be been of in on at to for from by with and or but if so as it its this that these those '+
+    'i me my mine we our you your ur u he she they them any some all kuch koi sab '+
+    'do does did can could would should will shall may might please plz pls kindly '+
+    'show tell give get find search see look looking want wanna need needed have has had there here '+
+    'what which who whom whose how much many when where why '+
+    'price prices cost costs rate rates pricing mrp worth '+
+    'available availability stock stocks instock item items product products thing things shop store dukaan '+
+    'hai hain h ha kya ka ke ki ko me mein mai mujhe humein hume chahiye chahie dikhao dikha dikhaiye batao bata bataiye do dena dedo de '+
+    'aur ye yeh wo woh kitna kitne kitni kimat dam na to bhi hi se par pe wala wali wale '+
+    'ok okay yes no also too just only really very more another other one ones some thanks '+
+    'under below above over less than upto up within around about between max maximum min minimum atleast least budget rs rupee rupees inr '+
+    'cheap cheapest cheaper costly costliest expensive sasta sasti mehnga best top good nice popular '+
+    'milega milenge milegi milti milta milte hoga hogi mil jayega sakta sakte sakti kaise kaisa suggest suggestion recommend recommendation something anything ideas idea options option stuff sell sells selling like likes near new latest').split(/\s+/));
+
+  const SYN = { copy:'notebook', copies:'notebook', kitab:'book', kitaab:'book', rubber:'eraser', colors:'colour', color:'colour', colours:'colour',
+    tiffin:'lunch', sharpner:'sharpener', pencile:'pencil', geomatry:'geometry', toy:'toy', toys:'toy', dolls:'doll', teddybear:'teddy',
+    chocolates:'chocolate', choclate:'chocolate', chocolet:'chocolate', cadbury:'cadbury', skates:'skate', sketchpen:'sketch', marker:'marker',
+    pencils:'pencil', pens:'pen', bag:'bag', bags:'bag', glue:'glue', gum:'glue', fevicol:'fevicol', crayons:'crayon', crayon:'crayon', waterbottle:'bottle',
+    ball:'ball', balls:'ball', games:'game', puzzles:'puzzle', diaries:'diary', registers:'register' };
+
+  const stem = t => {
+    if(t.length>4 && t.endsWith('ies')) return t.slice(0,-3)+'y';
+    if(t.length>4 && /(ch|sh|x|s)es$/.test(t)) return t.slice(0,-2);
+    if(t.length>3 && t.endsWith('s') && !t.endsWith('ss')) return t.slice(0,-1);
+    return t;
+  };
+  const norm = s => String(s||'').toLowerCase().replace(/₹/g,' rs ').replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+  const tokenize = s => norm(s).split(' ').filter(Boolean);
+  const canon = t => stem(SYN[t] || t);
+
+  function edit(a,b,max){
+    if(Math.abs(a.length-b.length)>max) return max+1;
+    const dp = Array.from({length:a.length+1},(_,i)=>[i]);
+    for(let j=1;j<=b.length;j++) dp[0][j]=j;
+    for(let i=1;i<=a.length;i++) for(let j=1;j<=b.length;j++){
+      dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    return dp[a.length][b.length];
+  }
+
+  /* ---------- product index ---------- */
+  const indexCache = new WeakMap();
+  function buildIndex(products){
+    if(indexCache.has(products)) return indexCache.get(products);
+    const idx = products.map(p=>({
+      p,
+      name: new Set(tokenize(p.name).map(canon)),
+      brand: new Set(tokenize(p.brand && p.brand!=='Generic' ? p.brand : '').map(canon)),
+      cat: new Set(tokenize((p.categoryLabel||'')+' '+(p.subcategory||'')).map(canon)),
+      desc: new Set(tokenize(p.desc||'').map(canon)),
+      lname: norm(p.name),
+    }));
+    indexCache.set(products, idx);
+    return idx;
+  }
+  function matchSet(q, set){
+    if(set.has(q)) return 1;
+    if(q.length<4) return 0;
+    let best = 0;
+    for(const d of set){
+      if(d.length>=q.length && d.startsWith(q) && d.length-q.length<=3){ best = Math.max(best, 0.85); continue; }
+      if(q.length>=5){
+        const e = edit(q,d, q.length>=8?2:1);
+        if(e<= (q.length>=8?2:1)) best = Math.max(best, e===1?0.7:0.6);
+      }
+    }
+    return best;
+  }
+  function scoreDoc(d, qTokens){
+    let total = 0, matched = 0;
+    for(const q of qTokens){
+      const m = Math.max(matchSet(q,d.name)*3, matchSet(q,d.brand)*2.5, matchSet(q,d.cat)*2, matchSet(q,d.desc)*0.8);
+      if(m>0){ matched++; total+=m; }
+    }
+    return {total, matched};
+  }
+
+  /* ---------- parsing helpers ---------- */
+  function parseBudget(raw){
+    let t = String(raw).toLowerCase().replace(/₹/g,' rs ').replace(/,/g,'');
+    let min=null, max=null, m;
+    const take = re => { const r = re.exec(t); if(r){ t = t.replace(r[0],' '); } return r; };
+    if((m = take(/(?:between|from)\s*(?:rs\.?\s*)?(\d+)\s*(?:rs\.?|rupees?)?\s*(?:and|to|-)\s*(?:rs\.?\s*)?(\d+)/))){ min=+m[1]; max=+m[2]; if(min>max)[min,max]=[max,min]; }
+    else if((m = take(/\b(\d+)\s*(?:-|to)\s*(\d+)\s*(?:rs|rupees?)?\b/)) && +m[2]>=+m[1]){ min=+m[1]; max=+m[2]; }
+    else if((m = take(/(?:under|below|less than|upto|up to|within|max(?:imum)?|budget(?: of| is)?|not more than|cheaper than|<)\s*(?:rs\.?|inr)?\s*(\d+)/))) max=+m[1];
+    else if((m = take(/\b(\d+)\s*(?:rs\.?|rupees?|inr)?\s*(?:se kam|se km|ke andar|ke ander|tak|or less|and below|or below|max)\b/))) max=+m[1];
+    else if((m = take(/(?:above|over|more than|at ?least|min(?:imum)?|from|>)\s*(?:rs\.?|inr)?\s*(\d+)/))) min=+m[1];
+    else if((m = take(/\b(\d+)\s*(?:rs\.?|rupees?|inr)?\s*(?:se zyada|se jyada|se upar|or more|and above|or above|plus|\+)/))) min=+m[1];
+    else if((m = take(/(?:around|about|approx(?:imately)?|near|roughly)\s*(?:rs\.?|inr)?\s*(\d+)/))){ const v=+m[1]; min=Math.round(v*0.75); max=Math.round(v*1.25); }
+    else if((m = take(/(?:\brs\.?|\binr)\s*(\d+)|\b(\d+)\s*(?:rs\.?|rupees?|inr)\b/))){ max = +(m[1]||m[2]); }
+    return {min, max, rest:t};
+  }
+
+  function currentIST(now){
+    const d = now || new Date();
+    const parts = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Kolkata',weekday:'short',hour:'numeric',minute:'numeric',hour12:false}).formatToParts(d);
+    const g = k => parts.find(p=>p.type===k).value;
+    return { day: g('weekday'), mins: (parseInt(g('hour'),10)%24)*60 + parseInt(g('minute'),10) };
+  }
+  function parseHours(str){
+    const m = /(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\s*[–—-]\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i.exec(str||'');
+    if(!m) return null;
+    const cv = (h,mi,ap)=>{ h=parseInt(h,10)%12; if(/pm/i.test(ap)) h+=12; return h*60+(mi?parseInt(mi,10):0); };
+    return { open: cv(m[1],m[2],m[3]), close: cv(m[4],m[5],m[6]) };
+  }
+  const fmtMin = m => { const h=Math.floor(m/60), mi=m%60, ap=h>=12?'PM':'AM'; const h12=h%12||12; return h12+':'+String(mi).padStart(2,'0')+' '+ap; };
+  const inr = n => '₹'+Number(n).toLocaleString('en-IN');
+
+  /* ---------- product search ---------- */
+  function searchProducts(products, queryText, opts){
+    opts = opts||{};
+    const b = opts.budget || parseBudget(queryText);
+    const qTokens = tokenize(b.rest||queryText).filter(t=>!STOP.has(t)).map(canon).filter(t=>t && !STOP.has(t));
+    const idx = buildIndex(products);
+    for(let i=qTokens.length-1;i>=0;i--){ if(/^\d{1,2}$/.test(qTokens[i]) && !idx.some(d=>d.name.has(qTokens[i]))) qTokens.splice(i,1); }
+    let pool = idx;
+    if(b.min!=null) pool = pool.filter(d=>d.p.price>=b.min);
+    if(b.max!=null) pool = pool.filter(d=>d.p.price<=b.max);
+    if(opts.excludeIds) pool = pool.filter(d=>!opts.excludeIds.includes(d.p.id));
+    if(opts.onlyCats) pool = pool.filter(d=> opts.onlyCats.includes(d.p.categoryLabel));
+    let exact = [], partial = [];
+    if(qTokens.length){
+      const phrase = norm((b.rest||queryText)).replace(/\b(show|me|do|you|have|any|a|the)\b/g,' ').replace(/\s+/g,' ').trim();
+      for(const d of pool){
+        const s = scoreDoc(d,qTokens);
+        if(!s.matched) continue;
+        let score = s.total + (phrase.length>2 && d.lname.includes(phrase) ? 4 : 0);
+        const row = {p:d.p, score};
+        if(s.matched===qTokens.length) exact.push(row);
+        else if(s.matched/qTokens.length>=0.5 && qTokens.length>=2) partial.push(row);
+      }
+    } else {
+      exact = pool.map(d=>({p:d.p, score:0}));
+    }
+    const sortFn = (x,y)=>{
+      const xs = x.p.stock>0?1:0, ys = y.p.stock>0?1:0;
+      if(xs!==ys) return ys-xs;
+      if(opts.sort==='asc') return x.p.price-y.p.price || y.score-x.score;
+      if(opts.sort==='desc') return y.p.price-x.p.price || y.score-x.score;
+      if(y.score!==x.score) return y.score-x.score;
+      const xf = x.p.tags && x.p.tags.includes('bestseller')?1:0, yf = y.p.tags && y.p.tags.includes('bestseller')?1:0;
+      if(xf!==yf) return yf-xf;
+      return x.p.name.length-y.p.name.length;
+    };
+    exact.sort(sortFn); partial.sort(sortFn);
+    return { exact:exact.map(r=>r.p), partial:partial.map(r=>r.p), qTokens, budget:b };
+  }
+
+  /* ---------- reply building ---------- */
+  const R = (text, extra) => Object.assign({text, products:[], chips:null, link:null, add:null, memory:null}, extra||{});
+  const SHOW = 5;
+  function budgetLabel(b){
+    if(b.min!=null && b.max!=null) return inr(b.min)+'–'+inr(b.max);
+    if(b.max!=null) return 'under '+inr(b.max);
+    if(b.min!=null) return 'above '+inr(b.min);
+    return '';
+  }
+  function stockNote(p){ return p.stock<=0 ? 'out of stock right now' : p.stock<=3 ? 'only '+p.stock+' left' : 'in stock'; }
+
+  function categoryForTokens(qTokens, categories){
+    if(!qTokens.length) return null;
+    for(const c of categories){
+      const ct = tokenize(c.name).map(canon).filter(t=>!STOP.has(t));
+      if(ct.length && qTokens.length===ct.length && ct.every(t=>qTokens.includes(t))) return c;
+    }
+    return null;
+  }
+
+  function reply(text, ctx){
+    const raw = String(text||'').trim();
+    const t = norm(raw);
+    const mem = ctx.memory || {};
+    const products = ctx.products || [];
+    const s = ctx.storeSettings || {};
+    const cfg = ctx.cfg || {};
+    const first = ctx.firstName ? ctx.firstName : '';
+    const has = re => re.test(t);
+    const phone = s.phone || '';
+
+    // --- social ---
+    const words = t.split(' ');
+    if(/^(hi+|hello+|hey+|hola|namaste|namaskar|hlo|helo|good (morning|afternoon|evening))\b/.test(t) && words.length<=4){
+      return R(`Hi${first?' '+first:''}! 👋 I'm the Meraki counter assistant. Ask me about products, prices, stock, delivery or shop timings.`, {chips:['Pens under ₹50','Gift ideas','Shop timings','Delivery charges']});
+    }
+    if(has(/^(thanks|thank you|thx|ty|shukriya|dhanyavad|ok thanks|okay thanks|great thanks)\b/)) return R("You're welcome! 😊 Anything else you'd like to look for?", {chips:['Show deals','Shop timings']});
+    if(has(/^(bye|goodbye|see you|tata|ok bye|alvida)\b/)) return R('Bye! Come back anytime 💜');
+    if(has(/\b(who are you|what can you do|what do you do|help me|help|kya kar sakte|how does this work)\b/) && words.length<=6){
+      return R("I'm a virtual counter assistant for this shop. I can:\n• Find products and tell you the price & stock\n• Search by budget — e.g. “notebooks under ₹100”\n• Add things to your cart\n• Tell you about delivery, payments, timings & address\n• Check your orders and reward balance", {chips:['Pens under ₹50','Toys for gifting','Where is the shop?','My orders']});
+    }
+
+    // --- follow-ups using memory ---
+    if(has(/^(show )?(more|aur|next|aur dikhao|more options|anything else|something else|others?)$/) && mem.lastSearch){
+      const ls = mem.lastSearch;
+      const r = searchProducts(products, ls.text, {excludeIds: ls.shown, sort: ls.sort, onlyCats: ls.onlyCats, budget: ls.budget});
+      const list = r.exact.slice(0,SHOW);
+      if(!list.length) return R("That's everything I have for that search. Want to try something different?", {chips:['Pens under ₹50','Gift ideas']});
+      return R('Here are some more:', {products:list, memory:{...mem, lastSearch:{...ls, shown:[...ls.shown, ...list.map(p=>p.id)]}, lastProducts:list.map(p=>p.id)}});
+    }
+    if(has(/\b(cheaper|sasta|sasti|lower price|less expensive|kam price|kam dam)\b/) && words.length<=6 && mem.lastSearch){
+      const ls = mem.lastSearch;
+      const shownP = (mem.lastProducts||[]).map(id=>ctx.productMap[id]).filter(Boolean);
+      const cap = shownP.length ? Math.min(...shownP.map(p=>p.price))-1 : (ls.budget.max||0);
+      const nb = {min:ls.budget.min, max:cap, rest:ls.budget.rest};
+      const r = searchProducts(products, ls.text, {budget:nb, sort:'desc', onlyCats:ls.onlyCats});
+      const list = r.exact.filter(p=>p.stock>0).slice(0,SHOW);
+      if(!list.length) return R("That's already the lowest price I have for that. 👍");
+      return R(`Cheaper options (under ${inr(cap+1)}):`, {products:list, memory:{...mem, lastSearch:{...ls, budget:nb, shown:list.map(p=>p.id)}, lastProducts:list.map(p=>p.id)}});
+    }
+
+    // --- shop info ---
+    if(has(/\b(deliver|delivery|shipping|courier|ghar pe|home delivery)\b/)){
+      const thr = cfg.freeDeliveryThreshold, dc = cfg.deliveryCharge, pc = cfg.packagingCharge;
+      return R(`🚚 Home delivery is ${inr(dc)}, and it's free on orders of ${inr(thr)} or more. There's also a ${inr(pc)} packaging charge. Most Jaipur orders arrive within 2–4 hours. You can also choose Store Pickup at checkout (ready in about 2 hours).`, {chips:['Payment methods','Shop timings','Where is the shop?']});
+    }
+    if(has(/\b(track|tracking|status|where is my|my orders?|mera order|last order|recent order|order history|parcel)\b/) || has(/^orders?$/)){
+      const orders = ctx.orders || [];
+      if(!ctx.loggedIn) return R('Please sign in to see your orders.');
+      if(!orders.length) return R("You haven't placed any orders yet. Want me to help you find something?", {chips:['Pens under ₹50','Gift ideas']});
+      const o = orders[0];
+      const names = o.items.slice(0,3).map(i=>i.name+(i.qty>1?' ×'+i.qty:'')).join(', ') + (o.items.length>3?' +'+(o.items.length-3)+' more':'');
+      return R(`Your latest order ${o.shortId} is **${o.status}** (${inr(o.total)})${names?'\nItems: '+names:''}.${orders.length>1?`\nYou have ${orders.length} orders in total.`:''}`, {link:{label:'Open my orders', href:'#/orders'}});
+    }
+    if(has(/\b(reward|rewards|points|loyalty|cashback|wallet)\b/)){
+      if(!ctx.loggedIn) return R('Sign in to see your rewards.');
+      return R(`💜 Your reward balance is **${inr(ctx.rewardBalance||0)}**. You earn 2% of every order's value once it's delivered, and you can use it at checkout.`, {link:{label:'View rewards', href:'#/rewards'}});
+    }
+    if(has(/\b(open|opens|opening|close|closes|closing|timing|timings|hours|khula|khulta|khulti|band|kab tak|kab khulta)\b/) && !has(/\b(order|delivery)\b/)){
+      const wk = parseHours(s.hoursWeekday), sn = parseHours(s.hoursSunday);
+      let status = '';
+      if(wk && sn){
+        const n = currentIST(ctx.now), h = n.day==='Sun' ? sn : wk;
+        const isOpen = n.mins>=h.open && n.mins<h.close;
+        status = isOpen ? `\n🟢 We're open right now — closing at ${fmtMin(h.close)}.` : `\n🔴 We're closed right now.`;
+      }
+      return R(`🕐 Mon–Sat: ${s.hoursWeekday}\nSunday: ${s.hoursSunday}${status}`, {chips:['Where is the shop?','Delivery charges']});
+    }
+    if(has(/\b(address|location|located|kahan|kaha|directions?|map|how to reach|visit)\b/) || has(/\bwhere\b.*\b(shop|store|you|located)\b/)){
+      const addr = [s.addressLine, s.area, s.city].filter(Boolean).join(', ') + (s.pincode?' — '+s.pincode:'');
+      return R(`📍 ${s.storeName||'Meraki'}\n${addr}`, {link:{label:'Open in Maps', href:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((s.storeName||'Meraki')+' '+addr)}, chips:['Shop timings','Contact number']});
+    }
+    if(has(/\b(phone|call|contact|number|whatsapp|email|mail)\b/) && !has(/\b(order|price)\b/)){
+      return R(`📞 You can call or WhatsApp us on ${phone}${s.email?'\n✉️ '+s.email:''}`, {link: phone ? {label:'Call now', href:'tel:'+phone} : null});
+    }
+    if(has(/\b(pay|payment|payments|upi|cod|cash on delivery|card|paytm|phonepe|gpay|google pay|net banking)\b/)){
+      const labels = Object.values(cfg.paymentLabels||{});
+      return R('💳 You can pay with:\n'+labels.map(l=>'• '+l).join('\n'), {chips:['Delivery charges']});
+    }
+    if(has(/\b(return|returns|refund|exchange|replace|replacement|wapas|damaged|broken)\b/)){
+      return R(`↩️ Unused items in original packaging can be returned within 7 days of delivery, and refunds go back to your original payment method in 3–5 business days. For a damaged item, please call or WhatsApp us on ${phone} with a photo.`);
+    }
+    if(has(/\b(offer|offers|discount|discounts|deal|deals|coupon|promo|sale)\b/)){
+      const deals = products.filter(p=>p.discount>0 && p.stock>0).sort((a,b)=>b.discount-a.discount).slice(0,SHOW);
+      const extra = `Delivery is free on orders of ${inr(cfg.freeDeliveryThreshold)}+, and you earn 2% rewards on delivered orders.`;
+      if(deals.length) return R('🔥 Items currently marked down:', {products:deals, memory:{...mem, lastProducts:deals.map(p=>p.id)}});
+      return R(`There are no marked-down items listed right now. ${extra}`, {chips:['Delivery charges','My rewards']});
+    }
+    if(has(/\b(checkout|place order|place my order|pay now)\b/)){
+      return R('Ready when you are 👍', {link:{label:'Go to cart', href:'#/cart'}});
+    }
+    if(has(/\b(cart|basket)\b/) && !has(/\b(add|put)\b/)){
+      const lines = ctx.cartLines || [];
+      if(!lines.length) return R('Your cart is empty. Want some suggestions?', {chips:['Pens under ₹50','Gift ideas']});
+      const sub = lines.reduce((a,l)=>a+l.product.price*l.qty,0);
+      const need = Math.max(0,(cfg.freeDeliveryThreshold||0)-sub);
+      return R(`🛒 You have ${lines.length} item${lines.length>1?'s':''} in your cart (${inr(sub)}):\n`+lines.slice(0,6).map(l=>`• ${l.product.name} ×${l.qty}`).join('\n')+(need>0?`\nAdd ${inr(need)} more for free delivery.`:'\nYou have free delivery! 🎉'), {link:{label:'Open cart', href:'#/cart'}});
+    }
+
+    // --- add to cart ---
+    const addM = /^(?:please\s+|pls\s+)?(?:add|put|buy|order|get me|i(?:'| )?ll take|i want to buy|take)\s+(.+?)(?:\s+(?:to|in|into)\s+(?:my\s+)?(?:cart|basket))?$/.exec(t);
+    const wantsAdd = !!addM || has(/\b(add (it|this|that)|add to cart|cart me daal|cart mein daal|le lo|lena hai)\b/);
+    if(wantsAdd){
+      let target = addM ? addM[1].replace(/^(\d+)\s*(?:x\s*)?/, '') : '';
+      let qty = 1; const qm = addM && /^(\d+)\s*(?:x|pcs|pieces)?\s+/.exec(addM[1]); if(qm) qty = Math.min(20, +qm[1]);
+      const lastIds = mem.lastProducts || [];
+      const pronoun = !target || /^(it|this|that|this one|that one|first|1st|the first( one)?|second|2nd|the second( one)?|third|3rd|the third( one)?|cheapest( one)?|last( one)?)$/.test(target.trim());
+      let chosen = null;
+      if(pronoun){
+        const cand = lastIds.map(id=>ctx.productMap[id]).filter(Boolean);
+        if(!cand.length) return R('Which product should I add? Tell me its name, or search first.');
+        const tt = target.trim();
+        if(/^(second|2nd|the second)/.test(tt)) chosen = cand[1]; else if(/^(third|3rd|the third)/.test(tt)) chosen = cand[2];
+        else if(/^cheapest/.test(tt)) chosen = [...cand].sort((a,b)=>a.price-b.price)[0];
+        else if(/^last/.test(tt)) chosen = cand[cand.length-1];
+        else if(cand.length===1 || /^(first|1st|the first)/.test(tt)) chosen = cand[0];
+        else return R('Which one? Say “add the first one”, “add the second”, or tell me the name.', {products:cand.slice(0,SHOW)});
+        if(!chosen) return R("I couldn't tell which one you meant — please tell me the product name.");
+      } else {
+        const r = searchProducts(products, target);
+        const list = r.exact.length ? r.exact : [];
+        if(!list.length) return R(`I couldn't find “${target}” in our catalog. Try another name or browse a category.`, {chips:['Pens under ₹50','Toys for gifting']});
+        const top = list.filter(p=>p.stock>0);
+        const clear = top.length===1 || (top.length>1 && list[0].stock>0 && norm(list[0].name)===norm(target));
+        if(!top.length) return R(`“${list[0].name}” is out of stock right now. You can tap “Notify me” on its page to get alerted when it's back.`, {products:list.slice(0,3), memory:{...mem, lastProducts:list.slice(0,3).map(p=>p.id)}});
+        if(!clear) return R(`I found a few matches for “${target}” — which one should I add?`, {products:top.slice(0,SHOW), memory:{...mem, lastProducts:top.slice(0,SHOW).map(p=>p.id)}});
+        chosen = top[0];
+      }
+      if(chosen.stock<=0) return R(`“${chosen.name}” is out of stock right now.`, {products:[chosen]});
+      const inCart = ((ctx.cartLines||[]).find(l=>l.id===chosen.id)||{qty:0}).qty;
+      if(inCart>=chosen.stock) return R(`You already have all ${chosen.stock} of “${chosen.name}” that we have in your cart.`, {link:{label:'Open cart', href:'#/cart'}});
+      const qOk = Math.min(qty, chosen.stock-inCart);
+      return R(`Added ${qOk>1?qOk+' × ':''}**${chosen.name}** (${inr(chosen.price)}) to your cart 🛒${qOk<qty?`\n(Only ${chosen.stock} in stock, so I added what's available.)`:''}`, {add:{id:chosen.id, qty:qOk}, products:[], link:{label:'Open cart', href:'#/cart'}, chips:['Show my cart','Delivery charges'], memory:{...mem, lastProducts:[chosen.id]}});
+    }
+
+    // --- product search family ---
+    const b = parseBudget(raw);
+    const wantsCheap = has(/\b(cheapest|lowest price|sabse sasta|sabse sasti|most affordable|budget friendly|cheap)\b/);
+    const wantsPricey = has(/\b(costliest|most expensive|highest price|sabse mehnga|premium|expensive|luxury)\b/);
+    const gift = has(/\b(gift|gifts|gifting|present|birthday|return gift|return gifts)\b/);
+    const sort = wantsCheap ? 'asc' : wantsPricey ? 'desc' : null;
+    let onlyCats = null;
+    let searchText = raw;
+    if(gift){
+      const rest = tokenize(b.rest).filter(x=>!STOP.has(x)).map(canon).filter(x=>!['gift','gifting','present','birthday','return','boy','girl','kid','child','children','baby','year','old','yr','age','friend','for','of'].includes(x) && !/^\d+$/.test(x));
+      if(!rest.length){
+        onlyCats = ['Gifts','Toys','Soft Toys','Art/Craft Toys','Chocolates'].filter(c=>products.some(p=>p.categoryLabel===c));
+        searchText = '';
+      }
+    }
+    const r = searchProducts(products, searchText||'', {budget:b, sort, onlyCats});
+    const catHit = !gift ? categoryForTokens(r.qTokens, ctx.categories||[]) : null;
+    const generic = !r.qTokens.length;
+
+    // recommendation without product words (e.g. "suggest something", "best sellers")
+    if(generic && !b.min && !b.max && !gift && !onlyCats){
+      if(has(/\b(suggest|recommend|recommendation|best|popular|trending|bestseller|bestsellers|top|new|latest|show|what do you have|what do you sell|kya milta)\b/) || words.length<=3){
+        const picks = (ctx.picks && ctx.picks.length ? ctx.picks : products.filter(p=>p.tags && p.tags.includes('bestseller')&&p.stock>0)).slice(0,SHOW);
+        if(!picks.length) return R('What are you looking for? Tell me a product, a category or a budget — for example “notebooks under ₹100”.', {chips:(ctx.categories||[]).slice(0,4).map(c=>c.name)});
+        if(picks.length) return R(ctx.picks && ctx.picks.length ? 'Based on what you like, you might enjoy:' : 'Some of our popular picks:', {products:picks, memory:{...mem, lastProducts:picks.map(p=>p.id)}, chips:['Pens under ₹50','Gift ideas','Show deals']});
+      }
+    }
+
+    if(generic && !b.min && !b.max && !onlyCats) return R('Tell me what you\'re looking for — a product name, a category, or a budget like “pens under ₹50”.', {chips:(ctx.categories||[]).slice(0,4).map(c=>c.name)});
+    let list = r.exact;
+    let approx = false;
+    if(!list.length && r.partial.length){ list = r.partial; approx = true; }
+
+    if(!list.length){
+      const bl = budgetLabel(b);
+      if(r.qTokens.length && (b.min!=null||b.max!=null)){
+        const wo = searchProducts(products, searchText, {budget:{min:null,max:null,rest:b.rest}, sort:'asc'});
+        if(wo.exact.length){
+          const cheapest = wo.exact.find(p=>p.stock>0) || wo.exact[0];
+          return R(`I don't have “${r.qTokens.join(' ')}” ${bl}. The lowest price I have is ${inr(cheapest.price)}:`, {products:[cheapest], memory:{...mem, lastProducts:[cheapest.id]}});
+        }
+      }
+      return R(`Sorry, I couldn't find ${r.qTokens.length?'“'+r.qTokens.join(' ')+'”':'anything'}${bl?' '+bl:''} in our catalog. 😕 Try another word, or call us on ${phone} — we may be able to arrange it.`, {chips:['Pens under ₹50','Gift ideas','Shop timings']});
+    }
+
+    const priceQ = has(/\b(price|cost|rate|how much|kitna|kitne|kimat|dam|mrp|kitni)\b/);
+    const stockQ = has(/\b(stock|available|availability|hai kya|milega|mil jayega|in stock)\b/);
+    const shown = list.slice(0,SHOW);
+    const total = list.length;
+    const bl = budgetLabel(b);
+
+    // single confident product: answer directly
+    if(!approx && total===1 || (priceQ||stockQ) && !approx && total>=1 && norm(shown[0].name)===norm(r.qTokens.join(' '))){
+      const p = shown[0];
+      const bits = [`**${p.name}** is ${inr(p.price)}`];
+      if(p.mrp>p.price) bits[0]+=` (MRP ${inr(p.mrp)}, ${p.discount}% off)`;
+      return R(bits[0]+` — ${stockNote(p)}.`, {products:[p], memory:{...mem, lastProducts:[p.id], lastSearch:{text:searchText, sort, onlyCats, budget:b, shown:[p.id]}}});
+    }
+
+    const label = catHit ? catHit.name : (r.qTokens.join(' ')||'items');
+    let head;
+    if(approx) head = `I couldn't find an exact match for “${label}”, but these are close:`;
+    else if(sort==='asc') head = `Cheapest ${label}${bl?' '+bl:''}:`;
+    else if(sort==='desc') head = `Premium ${label}${bl?' '+bl:''}:`;
+    else if(gift) head = `🎁 Gift ideas${bl?' '+bl:''}:`;
+    else head = `Found ${total} ${total===1?'match':'matches'} for “${label}”${bl?' '+bl:''}${total>SHOW?' — showing '+SHOW+':':':'}`;
+    if(!shown.some(p=>p.stock>0) && !approx) head += ' (all currently out of stock)';
+
+    const params = ['q='+encodeURIComponent(r.qTokens.join(' '))];
+    if(b.max!=null) params.push('maxPrice='+b.max);
+    if(b.min!=null) params.push('minPrice='+b.min);
+    let link = null;
+    if(total>SHOW){
+      link = catHit && b.min==null && b.max==null ? {label:'See all in '+catHit.name, href:'#/category/'+catHit.id}
+        : r.qTokens.length||b.min!=null||b.max!=null ? {label:'See all '+total+' results', href:'#/search?'+(r.qTokens.length?params.join('&'):params.slice(1).join('&'))} : null;
+    }
+    return R(head, {products:shown, link, chips: total>SHOW ? ['Show more','Anything cheaper?'] : null,
+      memory:{...mem, lastProducts:shown.map(p=>p.id), lastSearch:{text:searchText, sort, onlyCats, budget:b, shown:shown.map(p=>p.id)}}});
+  }
+
+  return { reply, searchProducts, parseBudget, tokenize, norm };
+})();
+
+/* ============================= PERSONALISATION ============================= */
+// Interest signals: orders (strongest), wishlist, cart, plus product views & category visits tracked
+// locally. Everything stays on the shopper's own device/account — nothing new is sent anywhere.
+const INTEREST_KEY = 'meraki_interest_v1';
+function readInterest(){
+  try{ const o = JSON.parse(localStorage.getItem(INTEREST_KEY)||'null'); if(o && o.cat && o.brand) return o; }catch(e){}
+  return {cat:{}, brand:{}};
+}
+function bumpInterest(catSlug, brand, catAmt, brandAmt){
+  try{
+    const o = readInterest();
+    if(catSlug) o.cat[catSlug] = Math.min(30, (o.cat[catSlug]||0) + catAmt);
+    if(brand && brand!=='Generic' && brand!=='General') o.brand[brand] = Math.min(20, (o.brand[brand]||0) + brandAmt);
+    localStorage.setItem(INTEREST_KEY, JSON.stringify(o));
+  }catch(e){ /* storage unavailable — personalisation just relies on orders/wishlist/cart */ }
+}
+function buildInterestProfile({orders, wishlist, cartLines, productMap}){
+  const local = readInterest();
+  const cat = {...local.cat}, brand = {...local.brand};
+  const bought = {}; // id -> {count, last}
+  (orders||[]).forEach(o=>{
+    if(o.status==='Cancelled') return;
+    (o.items||[]).forEach(it=>{
+      const p = productMap[it.id];
+      const w = Math.min(it.qty||1, 3);
+      if(p){ cat[p.category] = (cat[p.category]||0) + 4*w; if(p.brand && p.brand!=='Generic') brand[p.brand] = (brand[p.brand]||0) + 2*w; }
+      const b = bought[it.id] || {count:0, last:0};
+      b.count += it.qty||1; b.last = Math.max(b.last, new Date(o.date).getTime()||0);
+      bought[it.id] = b;
+    });
+  });
+  (wishlist||[]).forEach(id=>{ const p = productMap[id]; if(p){ cat[p.category]=(cat[p.category]||0)+2; } });
+  (cartLines||[]).forEach(l=>{ if(l.product){ cat[l.product.category]=(cat[l.product.category]||0)+1.5; } });
+  const topCats = Object.entries(cat).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  return { cat, brand, bought, topCats, signal: topCats.length>0 };
+}
+function dailyJitter(id){
+  const day = Math.floor(Date.now()/86400000);
+  let h = 0; const s = id+':'+day;
+  for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i))>>>0;
+  return (h%1000)/1000;
+}
+function rankForProfile(products, profile){
+  const maxCat = profile.topCats.length ? profile.topCats[0][1] : 1;
+  return products.map(p=>{
+    let s = (profile.cat[p.category]||0)/maxCat*10 + Math.min(profile.brand[p.brand]||0, 8)*0.4;
+    if(p.tags && p.tags.includes('bestseller')) s += 0.6;
+    if(profile.bought[p.id]) s -= 4; // already bought: "Buy it again" covers these
+    s += dailyJitter(p.id)*1.2;     // gentle daily variety, stable within a day
+    return {p, s};
+  }).sort((a,b)=>b.s-a.s).map(x=>x.p);
+}
+function usePersonalisation(){
+  const {orders, wishlist, cartLines, productMap, products} = useApp();
+  return useMemo(()=>{
+    const profile = buildInterestProfile({orders, wishlist, cartLines, productMap});
+    const inStock = products.filter(p=>p.stock>0);
+    const ranked = profile.signal ? rankForProfile(inStock, profile) : [];
+    const buyAgain = Object.entries(profile.bought)
+      .sort((a,b)=>b[1].last-a[1].last)
+      .map(([id])=>productMap[id]).filter(p=>p && p.stock>0).slice(0,8);
+    const labelOf = slug => { const p = products.find(x=>x.category===slug); return p ? p.categoryLabel : slug; };
+    const reason = profile.topCats.slice(0,2).map(([slug])=>labelOf(slug)).join(' & ');
+    return { profile, ranked, buyAgain, reason, signal: profile.signal };
+  }, [orders, wishlist, cartLines, productMap, products]);
+}
+// Personalised feed order: mostly your interests, with every 4th slot a "discovery" pick from elsewhere.
+function personalisedFeedOrder(products, ranked){
+  if(!ranked.length) return shuffleArray(products);
+  const rankedIds = new Set(ranked.map(p=>p.id));
+  const top = ranked.slice(0, Math.ceil(ranked.length*0.6));
+  const topIds = new Set(top.map(p=>p.id));
+  const discover = ranked.filter(p=>!topIds.has(p.id)).sort((a,b)=>dailyJitter(a.id)-dailyJitter(b.id));
+  const out = []; let ti=0, di=0;
+  while(ti<top.length || di<discover.length){
+    for(let k=0;k<3 && ti<top.length;k++) out.push(top[ti++]);
+    if(di<discover.length) out.push(discover[di++]);
+    else if(ti>=top.length) break;
+  }
+  const outOfStock = products.filter(p=>!rankedIds.has(p.id));
+  return [...out, ...outOfStock];
+}
+
+/* ============================= COUNTER ASSISTANT (chatbot) ============================= */
+function renderBotText(text){
+  return String(text).split('\n').map((line,i)=>(
+    <div key={i}>{line.split(/(\*\*[^*]+\*\*)/g).map((seg,j)=> /^\*\*[^*]+\*\*$/.test(seg) ? <strong key={j}>{seg.slice(2,-2)}</strong> : seg)}</div>
+  ));
+}
+function BotProductRow({product:p, onAdd, onOpen}){
+  const out = p.stock<=0;
+  return (
+    <div className="bot-prod">
+      <a href={"#/product/"+p.id} onClick={onOpen} className="flex items-center gap-2.5 min-w-0 flex-1 focus-ring" style={{textDecoration:'none', color:'inherit'}}>
+        <ProductImg product={p} className="w-12 h-12 rounded-lg text-xl flex-shrink-0" />
+        <div className="min-w-0">
+          <div className="text-xs font-semibold leading-snug" style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{p.name}</div>
+          <div className="text-xs mt-0.5">
+            <span className="font-bold">{inr(p.price)}</span>
+            {p.mrp>p.price && <span className="text-[var(--muted)] line-through ml-1">{inr(p.mrp)}</span>}
+            <span className={"ml-1.5 "+(out?'text-[var(--danger)]':p.stock<=3?'text-[var(--amber)]':'text-[var(--green)]')}>{out?'Out of stock':p.stock<=3?'Only '+p.stock+' left':'In stock'}</span>
+          </div>
+        </div>
+      </a>
+      <button disabled={out} onClick={()=>onAdd(p)} className="bot-add focus-ring" aria-label={"Add "+p.name+" to cart"}>{out?'—':'Add'}</button>
+    </div>
+  );
+}
+function MeraAssistant({hidden}){
+  const app = useApp();
+  const {products, productMap, categories, storeSettings, orders, cartLines, rewardBalance, loggedIn, customerProfile, addToCart} = app;
+  const pers = usePersonalisation();
+  const firstName = (customerProfile && customerProfile.full_name) ? customerProfile.full_name.trim().split(/\s+/)[0] : '';
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState('');
+  const [typing, setTyping] = useState(false);
+  const memRef = useRef({});
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+  const idRef = useRef(0);
+  const ctxRef = useRef(null);
+  ctxRef.current = {products, productMap, categories, storeSettings, orders, cartLines, rewardBalance, loggedIn, firstName,
+    picks: pers.ranked.slice(0,5),
+    cfg:{freeDeliveryThreshold:FREE_DELIVERY_THRESHOLD, deliveryCharge:DELIVERY_CHARGE, packagingCharge:PACKAGING_CHARGE, paymentLabels:PAYMENT_LABELS}};
+
+  useEffect(()=>{
+    if(open && !msgs.length){
+      setMsgs([{id:++idRef.current, role:'bot', text:`Hi${firstName?' '+firstName:''}! 👋 I'm your Meraki counter assistant. Ask me about any product, price or stock, or about delivery and shop timings.`, chips:['Pens under ₹50','Gift ideas','Shop timings','Delivery charges']}]);
+    }
+    if(open) setTimeout(()=>inputRef.current && inputRef.current.focus(), 120);
+  },[open]);
+  useEffect(()=>{ endRef.current && endRef.current.scrollIntoView({block:'end'}); },[msgs, typing, open]);
+  useEffect(()=>{
+    if(!open) return;
+    const onKey = e=>{ if(e.key==='Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return ()=> window.removeEventListener('keydown', onKey);
+  },[open]);
+
+  const send = useCallback((text)=>{
+    const q = String(text||'').trim();
+    if(!q) return;
+    setInput('');
+    setMsgs(m=>[...m, {id:++idRef.current, role:'user', text:q}]);
+    setTyping(true);
+    setTimeout(()=>{
+      let r;
+      try{ r = MerakiBot.reply(q, {...ctxRef.current, memory: memRef.current}); }
+      catch(e){ r = {text:"Sorry, I got a bit confused there. Could you rephrase that?", products:[], chips:null, link:null, add:null, memory:null}; }
+      if(r.memory) memRef.current = r.memory;
+      if(r.add) addToCart(r.add.id, r.add.qty);
+      setTyping(false);
+      setMsgs(m=>[...m, {id:++idRef.current, role:'bot', text:r.text, products:r.products, chips:r.chips, link:r.link}]);
+    }, 380);
+  },[addToCart]);
+
+  const voice = useVoiceSearch(useCallback(t=>send(t),[send]));
+  const addFromCard = p => { addToCart(p.id, 1); setMsgs(m=>[...m, {id:++idRef.current, role:'bot', text:`Added **${p.name}** to your cart 🛒`, link:{label:'Open cart', href:'#/cart'}}]); };
+
+  if(hidden) return null;
+  const lastBotId = [...msgs].reverse().find(m=>m.role==='bot');
+  return ReactDOM.createPortal(
+    <>
+      {!open && (
+        <button className="bot-fab focus-ring" onClick={()=>setOpen(true)} aria-label="Chat with the Meraki assistant">
+          <span aria-hidden="true" style={{fontSize:22,lineHeight:1}}>💬</span>
+          <span className="bot-fab-label">Ask Meraki</span>
+        </button>
+      )}
+      {open && (
+        <div className="bot-panel" role="dialog" aria-label="Meraki counter assistant">
+          <div className="bot-head">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="bot-avatar" aria-hidden="true">🛍️</div>
+              <div className="min-w-0">
+                <div className="font-display font-bold text-sm leading-tight">Meraki Assistant</div>
+                <div className="text-[11px] opacity-80 leading-tight">Virtual counter · replies from live shop data</div>
+              </div>
+            </div>
+            <button onClick={()=>setOpen(false)} className="bot-close focus-ring" aria-label="Close chat">✕</button>
+          </div>
+          <div className="bot-body" aria-live="polite">
+            {msgs.map(m=> (
+              <div key={m.id} className={"bot-row "+(m.role==='user'?'user':'bot')}>
+                <div className={"bot-bubble "+(m.role==='user'?'user':'bot')}>{renderBotText(m.text)}</div>
+                {m.products && m.products.length>0 && (
+                  <div className="bot-prods">
+                    {m.products.map(p=> <BotProductRow key={p.id} product={productMap[p.id]||p} onAdd={addFromCard} onOpen={()=>setOpen(false)} />)}
+                  </div>
+                )}
+                {m.link && (
+                  m.link.href.startsWith('#')
+                    ? <a href={m.link.href} onClick={()=>setOpen(false)} className="bot-link focus-ring">{m.link.label} ›</a>
+                    : <a href={m.link.href} target="_blank" rel="noopener noreferrer" className="bot-link focus-ring">{m.link.label} ›</a>
+                )}
+                {m.chips && m===lastBotId && !typing && (
+                  <div className="bot-chips">{m.chips.map(c=> <button key={c} className="bot-chip focus-ring" onClick={()=>send(c)}>{c}</button>)}</div>
+                )}
+              </div>
+            ))}
+            {typing && <div className="bot-row bot"><div className="bot-bubble bot bot-typing" aria-label="Typing"><span></span><span></span><span></span></div></div>}
+            <div ref={endRef}></div>
+          </div>
+          <form className="bot-input" onSubmit={e=>{ e.preventDefault(); send(input); }}>
+            <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about a product, price, timings…" aria-label="Type your message" maxLength={200} />
+            {voice.supported && <button type="button" onClick={voice.start} className={"bot-mic focus-ring "+(voice.listening?'listening':'')} aria-label="Speak your question">🎤</button>}
+            <button type="submit" className="bot-send focus-ring" disabled={!input.trim()} aria-label="Send">➤</button>
+          </form>
+        </div>
+      )}
+    </>, document.body);
+}
+
 function AppShell({route, hash}){
   const {loggedIn, authLoading} = useApp();
   useEffect(()=>{
@@ -5569,6 +6220,7 @@ function AppShell({route, hash}){
       </div>
       {!isCheckoutOrConfirm && <div className="mobile-only h-14"></div>}
       {!isCheckoutOrConfirm && <BottomNav route={route} />}
+      <MeraAssistant hidden={isCheckoutOrConfirm} />
       <Toast />
     </div>
   );
