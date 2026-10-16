@@ -1,6 +1,7 @@
 {
   "name": "Meraki — Stationery & Toys",
   "short_name": "Meraki",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

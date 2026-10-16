@@ -6523,6 +6523,18 @@ function PushSync(){
   return null;
 }
 
+// Shows what happened the last time a notification was tapped (written by the service worker) —
+// lets us see why a tap didn't open the app, instead of guessing.
+function LastTapNote(){
+  const [note, setNote] = useState(null);
+  useEffect(()=>{
+    if(!('caches' in window)) return;
+    caches.open('meraki-diag').then(c=>c.match('last-tap')).then(r=> r ? r.json() : null).then(d=>{ if(d) setNote(d); }).catch(()=>{});
+  },[]);
+  if(!note) return null;
+  const when = new Date(note.t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+  return <div className="text-[10px] text-[var(--muted)] mt-2">Last notification tap: {when} — {note.result}{note.err?(' ('+note.err+')'):''}</div>;
+}
 function NotificationsCard(){
   const p = usePushNotifications();
   const msg = {
@@ -6545,6 +6557,7 @@ function NotificationsCard(){
         {p.state==='off' && <button onClick={p.enable} disabled={p.busy} className="btn-primary px-4 py-2 text-xs flex-shrink-0 focus-ring">{p.busy?'…':'Turn on'}</button>}
         {p.state==='on' && <button onClick={p.disable} disabled={p.busy} className="btn-secondary px-4 py-2 text-xs flex-shrink-0 focus-ring">{p.busy?'…':'Turn off'}</button>}
       </div>
+      <LastTapNote />
       {p.state==='on' && (
         <label className="flex items-center gap-2.5 mt-3 p-2.5 rounded-xl bg-[var(--purple-light)] cursor-pointer">
           <input type="checkbox" checked={p.promos} onChange={e=>p.setPromos(e.target.checked)} className="w-4 h-4 accent-[var(--purple)] flex-shrink-0" />
@@ -6578,7 +6591,20 @@ function PushPromptBanner(){
 
 /* ---- Admin: send a notification to customers ---- */
 function AdminNotify(){
-  const {showToast} = useApp();
+  const {showToast, products, categories} = useApp();
+  const [destKind, setDestKind] = useState('page');
+  const [prodQuery, setProdQuery] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const STATIC_PAGES = [
+    ['#/home','Home page'],['#/cart','Cart'],['#/wishlist','Wishlist'],['#/orders','My orders'],
+    ['#/rewards','Rewards'],['#/account','Account & notifications'],
+  ];
+  const prodMatches = useMemo(()=>{
+    const q = prodQuery.trim().toLowerCase();
+    if(!q) return [];
+    return (products||[]).filter(p=> (p.name||'').toLowerCase().includes(q)).slice(0,6);
+  },[prodQuery, products]);
+  const pickedProduct = useMemo(()=> (products||[]).find(p=> url==='#/product/'+p.id), [url, products]);
   const PRESETS = [
     {label:'New arrivals', title:'🆕 New arrivals just landed!', body:'Fresh stationery & toys are on the shelves. Come take a look.', url:'#/home'},
     {label:'Sale / offer', title:'🔥 Special offer this week', body:'Great picks at friendly prices — tap to shop.', url:'#/home'},
@@ -6641,7 +6667,7 @@ function AdminNotify(){
         <div>
           <div className="text-xs font-semibold text-[var(--muted)] mb-1.5">Quick start</div>
           <div className="flex flex-wrap gap-2">
-            {PRESETS.map(pr=> <button key={pr.label} type="button" onClick={()=>{ setTitle(pr.title); setText(pr.body); setUrl(pr.url); setResult(null); }} className="chip focus-ring">{pr.label}</button>)}
+            {PRESETS.map(pr=> <button key={pr.label} type="button" onClick={()=>{ setTitle(pr.title); setText(pr.body); setUrl(pr.url); setDestKind(pr.url.startsWith('#/category/')?'category':'page'); setResult(null); }} className="chip focus-ring">{pr.label}</button>)}
           </div>
         </div>
         <div>
@@ -6654,12 +6680,50 @@ function AdminNotify(){
         </div>
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Opens when tapped</label>
-          <select value={url} onChange={e=>setUrl(e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
-            <option value="#/home">Home page</option>
-            <option value="#/category/stationery">Stationery</option>
-            <option value="#/category/toys">Toys</option>
-            <option value="#/category/notebooks-diaries">Notebooks &amp; Diaries</option>
-          </select>
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {[['page','A page'],['category','A category'],['product','A product'],['search','A search']].map(([k,l])=>(
+              <button key={k} type="button" onClick={()=>{
+                setDestKind(k);
+                if(k==='page') setUrl('#/home');
+                if(k==='category') setUrl(categories && categories[0] ? '#/category/'+categories[0].id : '#/home');
+                if(k==='product') setUrl('#/home');
+                if(k==='search') setUrl(searchTerm.trim() ? '#/search?q='+encodeURIComponent(searchTerm.trim()) : '#/home');
+              }} className={'chip focus-ring '+(destKind===k?'active':'')}>{l}</button>
+            ))}
+          </div>
+          {destKind==='page' && (
+            <select value={url} onChange={e=>setUrl(e.target.value)} className="w-full mt-2 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+              {STATIC_PAGES.map(([v,l])=> <option key={v} value={v}>{l}</option>)}
+            </select>
+          )}
+          {destKind==='category' && (
+            <select value={url} onChange={e=>setUrl(e.target.value)} className="w-full mt-2 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+              {(categories||[]).map(c=> <option key={c.id} value={'#/category/'+c.id}>{c.name}</option>)}
+            </select>
+          )}
+          {destKind==='product' && (
+            <div className="mt-2">
+              {pickedProduct ? (
+                <div className="flex items-center gap-2 rounded-lg border border-[var(--line)] p-2">
+                  <div className="text-sm font-semibold flex-1 min-w-0 truncate">{pickedProduct.name}</div>
+                  <button type="button" onClick={()=>{ setUrl('#/home'); setProdQuery(''); }} className="text-xs font-semibold text-[var(--purple)] focus-ring">Change</button>
+                </div>
+              ) : (
+                <>
+                  <input value={prodQuery} onChange={e=>setProdQuery(e.target.value)} placeholder="Type a product name…" className="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+                  {prodMatches.length>0 && (
+                    <div className="mt-1 rounded-lg border border-[var(--line)] divide-y divide-[var(--line)] overflow-hidden">
+                      {prodMatches.map(p=> <button key={p.id} type="button" onClick={()=>{ setUrl('#/product/'+p.id); setProdQuery(''); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--purple-light)] focus-ring">{p.name}</button>)}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {destKind==='search' && (
+            <input value={searchTerm} onChange={e=>{ setSearchTerm(e.target.value); const t=e.target.value.trim(); setUrl(t ? '#/search?q='+encodeURIComponent(t) : '#/home'); }} placeholder="e.g. gel pens" className="w-full mt-2 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          )}
+          <div className="text-[11px] text-[var(--muted)] mt-1.5">Opens: <span className="font-semibold">{url}</span></div>
         </div>
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Picture <span className="font-normal">(optional — wide pictures look best, it's cropped to 2:1)</span></label>

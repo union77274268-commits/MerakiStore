@@ -20,11 +20,17 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(d.title || 'Meraki', opts));
 });
 
+// Remember what happened on the last tap so the app can show it (helps pin down "tap didn't open the app").
+const note = (result, err) => caches.open('meraki-diag')
+  .then((c) => c.put('last-tap', new Response(JSON.stringify({ t: Date.now(), result, err: err ? String(err).slice(0, 80) : '' }))))
+  .catch(() => {});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const hash = (event.notification.data && event.notification.data.url) || '#/home';
-  const base = new URL(PAGE, self.location.origin).href.split('#')[0];
-  const target = base + hash;
+  // Use the service-worker scope (the site root) as the base: it is always inside the installed app's scope.
+  const root = self.registration.scope;
+  const target = root + hash;
   event.waitUntil((async () => {
     let wins = [];
     try { wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true }); } catch (e) {}
@@ -32,10 +38,14 @@ self.addEventListener('notificationclick', (event) => {
     if (mine) {
       try { if ('focus' in mine) await mine.focus(); } catch (e) {}
       mine.postMessage({ type: 'navigate', url: hash });
+      await note('focused open app');
       return;
     }
-    // App is closed: open it straight on the right screen. Fall back to the site root if that is refused.
-    try { await self.clients.openWindow(target); }
-    catch (e) { try { await self.clients.openWindow(self.registration.scope); } catch (e2) {} }
+    // App is closed: open it on the right screen; fall back to the plain app root if that is refused.
+    try { await self.clients.openWindow(target); await note('opened app'); return; }
+    catch (e1) {
+      try { await self.clients.openWindow(root); await note('opened app root (page link refused)', e1); }
+      catch (e2) { await note('could not open app', e2); }
+    }
   })());
 });
