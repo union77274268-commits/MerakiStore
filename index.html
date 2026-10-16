@@ -561,8 +561,13 @@ const AppContext = createContext(null);
 const useApp = () => useContext(AppContext);
 
 function AppProvider({children}){
-  const [cart, setCart] = useState([]); // [{id,qty}]
-  const [wishlist, setWishlist] = useState([]); // [id]
+  // Guests (not logged in) keep their cart/wishlist on this device so a refresh or coming back later doesn't lose it;
+  // when they log in, those items are merged into their account.
+  const readGuest = (k)=>{ try{ const v = JSON.parse(localStorage.getItem(k)||'[]'); return Array.isArray(v) ? v : []; }catch(e){ return []; } };
+  const writeGuest = (k, v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+  const [cart, setCart] = useState(()=> readGuest('meraki_guest_cart').filter(c=> c && c.id && c.qty>0)); // [{id,qty}]
+  const [wishlist, setWishlist] = useState(()=> readGuest('meraki_guest_wishlist').filter(x=> typeof x==='string')); // [id]
+  const wasSignedIn = useRef(false);
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [rewardBalance, setRewardBalance] = useState(0);
@@ -585,6 +590,8 @@ function AppProvider({children}){
 
   // ---- Real Supabase Auth ----
   const [session, setSession] = useState(null);
+  useEffect(()=>{ if(!session) writeGuest('meraki_guest_cart', cart); },[cart, session]);
+  useEffect(()=>{ if(!session) writeGuest('meraki_guest_wishlist', wishlist); },[wishlist, session]);
   const [authLoading, setAuthLoading] = useState(true);
   const [customerProfile, setCustomerProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -791,9 +798,35 @@ function AppProvider({children}){
   },[session]);
 
   useEffect(()=>{
-    if(!session){ setCart([]); setWishlist([]); return; }
-    fetchCart();
-    fetchWishlist();
+    if(!session){
+      // only wipe when someone actually logs out — not on first load, where guest items were just restored
+      if(wasSignedIn.current){ wasSignedIn.current = false; setCart([]); setWishlist([]); }
+      return;
+    }
+    wasSignedIn.current = true;
+    let cancelled = false;
+    (async ()=>{
+      const uid = session.user.id;
+      const gc = readGuest('meraki_guest_cart').filter(c=> c && c.id && c.qty>0);
+      const gw = readGuest('meraki_guest_wishlist').filter(x=> typeof x==='string');
+      if(gc.length || gw.length){
+        try{
+          if(gc.length){
+            const { data: ex } = await sb.from('customer_cart_items').select('product_id, quantity').eq('customer_id', uid);
+            const have = Object.fromEntries((ex||[]).map(r=> [r.product_id, r.quantity]));
+            await sb.from('customer_cart_items').upsert(
+              gc.map(c=> ({ customer_id: uid, product_id: c.id, quantity: Math.min(20, Math.max(have[c.id]||0, c.qty)) })),
+              { onConflict: 'customer_id,product_id' });
+          }
+          if(gw.length){
+            await sb.from('customer_wishlist').upsert(gw.map(id=> ({ customer_id: uid, product_id: id })), { onConflict: 'customer_id,product_id' });
+          }
+        }catch(e){ console.error('Merging guest cart failed', e); }
+        writeGuest('meraki_guest_cart', []); writeGuest('meraki_guest_wishlist', []);
+      }
+      if(!cancelled){ fetchCart(); fetchWishlist(); }
+    })();
+    return ()=>{ cancelled = true; };
   },[session, fetchCart, fetchWishlist]);
 
   // Realtime: this customer's own orders, cart, wishlist and profile — updates
@@ -2982,6 +3015,246 @@ function FrequentlyBoughtTogether({product, candidates}){
   );
 }
 
+/* ---------- Product gallery (storefront): several photos + one short clip ---------- */
+function useProductMedia(productId){
+  const [media, setMedia] = useState({ images: [], video: null, loaded: false });
+  useEffect(()=>{
+    let cancelled = false;
+    setMedia({ images: [], video: null, loaded: false });
+    if(!productId) return;
+    Promise.all([
+      sb.from('product_images').select('image_url, is_primary, sort_order').eq('product_id', productId).order('is_primary', {ascending:false}).order('sort_order').order('created_at'),
+      sb.from('product_videos').select('video_url').eq('product_id', productId).maybeSingle(),
+    ]).then(([imgs, vid])=>{
+      if(cancelled) return;
+      setMedia({
+        images: (imgs.data||[]).map(r=>r.image_url).filter(Boolean),
+        video: (vid.data && vid.data.video_url) || null,
+        loaded: true,
+      });
+    }).catch(()=>{ if(!cancelled) setMedia(m=>({...m, loaded:true})); });
+    return ()=>{ cancelled = true; };
+  },[productId]);
+  return media;
+}
+
+function ProductGallery({product, children}){
+  const media = useProductMedia(product.id);
+  const slides = useMemo(()=>{
+    const list = media.images.map(u=>({type:'image', url:u}));
+    if(!list.length && product.image) list.push({type:'image', url:product.image});
+    if(media.video) list.push({type:'video', url:media.video});
+    return list;
+  },[media, product.image]);
+  const [idx, setIdx] = useState(0);
+  const trackRef = useRef(null);
+  const videoRef = useRef(null);
+  useEffect(()=>{ setIdx(0); if(trackRef.current) trackRef.current.scrollLeft = 0; },[product.id]);
+
+  const goTo = (i)=>{
+    const el = trackRef.current; if(!el) return;
+    const n = Math.max(0, Math.min(slides.length-1, i));
+    el.scrollTo({ left: n*el.clientWidth, behavior:'smooth' });
+    setIdx(n);
+  };
+  const onScroll = ()=>{
+    const el = trackRef.current; if(!el || !el.clientWidth) return;
+    const n = Math.round(el.scrollLeft/el.clientWidth);
+    if(n!==idx){ setIdx(n); if(videoRef.current) videoRef.current.pause(); }
+  };
+
+  // Nothing extra to show — keep the original single picture look.
+  if(slides.length<=1 && !(slides[0] && slides[0].type==='video')){
+    return (
+      <div className="relative">
+        <ProductImg product={product} className="w-full aspect-square text-7xl md:rounded-2xl" />
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="relative">
+        <div ref={trackRef} onScroll={onScroll} className="flex overflow-x-auto snap-x snap-mandatory md:rounded-2xl" style={{scrollbarWidth:'none'}}>
+          {slides.map((s,i)=>(
+            <div key={i} className="min-w-full snap-center aspect-square bg-black/5 flex items-center justify-center">
+              {s.type==='image'
+                ? <img src={s.url} alt={product.name+' photo '+(i+1)} loading={i===0?'eager':'lazy'} decoding="async" className="w-full h-full object-cover" />
+                : <video ref={videoRef} src={s.url+'#t=0.1'} controls playsInline preload="metadata" className="w-full h-full bg-black" style={{objectFit:'contain'}} />}
+            </div>
+          ))}
+        </div>
+        {slides.length>1 && (
+          <>
+            <button aria-label="Previous" onClick={()=>goTo(idx-1)} disabled={idx===0} className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 shadow items-center justify-center focus-ring disabled:opacity-30">‹</button>
+            <button aria-label="Next" onClick={()=>goTo(idx+1)} disabled={idx===slides.length-1} className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 shadow items-center justify-center focus-ring disabled:opacity-30">›</button>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 md:hidden pointer-events-none">
+              {slides.map((_,i)=> <span key={i} className="rounded-full" style={{width:i===idx?16:6, height:6, background:i===idx?'var(--purple)':'rgba(0,0,0,.25)', transition:'all .2s'}}></span>)}
+            </div>
+          </>
+        )}
+        {children}
+      </div>
+      <div className="flex gap-2 mt-3 overflow-x-auto pb-1" style={{scrollbarWidth:'none'}}>
+        {slides.map((s,i)=>(
+          <button key={i} onClick={()=>goTo(i)} aria-label={s.type==='video'?'Play video':'Photo '+(i+1)}
+            className={"relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border-2 focus-ring "+(i===idx?'border-[var(--purple)]':'border-transparent')}>
+            {s.type==='image'
+              ? <img src={s.url} alt="" loading="lazy" className="w-full h-full object-cover" />
+              : <span className="w-full h-full bg-[#1b1b1f] text-white flex items-center justify-center text-xl">▶</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Admin: manage a product's photos (up to 8) and one clip ---------- */
+const MAX_PRODUCT_PHOTOS = 8;
+const MAX_VIDEO_MB = 30;
+
+async function shrinkImageToJpeg(file, maxSide=1400){
+  try{
+    const bmp = await createImageBitmap(file);
+    const r = Math.min(1, maxSide/Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width*r); c.height = Math.round(bmp.height*r);
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const blob = await new Promise(res=> c.toBlob(res,'image/jpeg',0.86));
+    if(blob) return blob;
+  }catch(e){}
+  return file;
+}
+
+function ProductMediaEditor({item}){
+  const { showToast } = useApp();
+  const [photos, setPhotos] = useState([]);   // [{id, image_url, object_path, is_primary}]
+  const [video, setVideo] = useState(null);   // {id, video_url, object_path}
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState('');       // '', 'photos', 'video'
+
+  const load = useCallback(async ()=>{
+    const [imgs, vid] = await Promise.all([
+      sbAdmin.from('product_images').select('id, image_url, object_path, is_primary, sort_order').eq('product_id', item.id).order('is_primary', {ascending:false}).order('sort_order').order('created_at'),
+      sbAdmin.from('product_videos').select('id, video_url, object_path').eq('product_id', item.id).maybeSingle(),
+    ]);
+    setPhotos(imgs.data||[]); setVideo(vid.data||null); setLoading(false);
+  },[item.id]);
+  useEffect(()=>{ load(); },[load]);
+
+  const addPhotos = async (e)=>{
+    const files = Array.from(e.target.files||[]); e.target.value='';
+    if(!files.length) return;
+    const room = MAX_PRODUCT_PHOTOS - photos.length;
+    if(room<=0){ showToast('Up to '+MAX_PRODUCT_PHOTOS+' photos per product','⚠️'); return; }
+    const chosen = files.slice(0, room);
+    if(files.length>room) showToast('Only '+room+' more photo'+(room===1?'':'s')+' fit — added the first '+room,'⚠️');
+    setBusy('photos');
+    let added = 0, nextOrder = photos.reduce((m,p)=>Math.max(m,p.sort_order||0),0)+1, haveMain = photos.some(p=>p.is_primary);
+    for(const f of chosen){
+      if(!/^image\//.test(f.type)) continue;
+      const blob = await shrinkImageToJpeg(f);
+      if(blob.size > 5*1024*1024){ showToast(f.name+' is too large','⚠️'); continue; }
+      const path = item.id+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,7)+'.jpg';
+      const { error: upErr } = await sbAdmin.storage.from('product-images').upload(path, blob, { upsert:true, contentType:'image/jpeg' });
+      if(upErr){ showToast('Upload failed','⚠️'); continue; }
+      const { data: pub } = sbAdmin.storage.from('product-images').getPublicUrl(path);
+      const makeMain = !haveMain;
+      const { error } = await sbAdmin.from('product_images').insert({ product_id:item.id, object_path:path, image_url:pub.publicUrl, is_primary:makeMain, sort_order: makeMain?0:nextOrder++ });
+      if(error){ showToast('Could not save photo','⚠️'); continue; }
+      haveMain = true; added++;
+    }
+    await load(); setBusy('');
+    if(added) showToast(added+' photo'+(added===1?'':'s')+' added','📸');
+  };
+
+  const makeMain = async (p)=>{
+    if(p.is_primary) return;
+    await sbAdmin.from('product_images').update({ is_primary:false }).eq('product_id', item.id);
+    await sbAdmin.from('product_images').update({ is_primary:true, sort_order:0 }).eq('id', p.id);
+    await load();
+  };
+
+  const removePhoto = async (p)=>{
+    await sbAdmin.from('product_images').delete().eq('id', p.id);
+    if(p.object_path) sbAdmin.storage.from('product-images').remove([p.object_path]);
+    if(p.is_primary){
+      const next = photos.find(x=>x.id!==p.id);
+      if(next) await sbAdmin.from('product_images').update({ is_primary:true, sort_order:0 }).eq('id', next.id);
+    }
+    await load();
+  };
+
+  const addVideo = async (e)=>{
+    const f = e.target.files && e.target.files[0]; e.target.value='';
+    if(!f) return;
+    if(!/^video\//.test(f.type)){ showToast('Please choose a video file','⚠️'); return; }
+    if(f.size > MAX_VIDEO_MB*1024*1024){ showToast('Video must be under '+MAX_VIDEO_MB+'MB — a short clip (10–20 seconds) works best','⚠️'); return; }
+    setBusy('video');
+    const ext = (f.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5) || 'mp4';
+    const path = 'videos/'+item.id+'/'+Date.now()+'.'+ext;
+    const { error: upErr } = await sbAdmin.storage.from('product-images').upload(path, f, { upsert:true, contentType:f.type });
+    if(upErr){ setBusy(''); showToast('Video upload failed — it may be too large','⚠️'); return; }
+    const { data: pub } = sbAdmin.storage.from('product-images').getPublicUrl(path);
+    const old = video;
+    const { error } = await sbAdmin.from('product_videos').upsert({ product_id:item.id, object_path:path, video_url:pub.publicUrl }, { onConflict:'product_id' });
+    if(error){ setBusy(''); showToast('Could not save video','⚠️'); return; }
+    if(old && old.object_path) sbAdmin.storage.from('product-images').remove([old.object_path]);
+    await load(); setBusy(''); showToast('Video added','🎬');
+  };
+
+  const removeVideo = async ()=>{
+    if(!video) return;
+    await sbAdmin.from('product_videos').delete().eq('id', video.id);
+    if(video.object_path) sbAdmin.storage.from('product-images').remove([video.object_path]);
+    await load();
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-[var(--muted)]">Product photos <span className="font-normal">({photos.length}/{MAX_PRODUCT_PHOTOS})</span></label>
+        </div>
+        {loading ? <div className="mt-1 h-24 rounded-lg skeleton"></div> : (
+          <div className="grid grid-cols-4 gap-2 mt-1.5">
+            {photos.map(p=>(
+              <div key={p.id} className={"relative aspect-square rounded-lg overflow-hidden border-2 "+(p.is_primary?'border-[var(--purple)]':'border-[var(--line)]')}>
+                <img src={p.image_url} alt="" className="w-full h-full object-cover" />
+                <button type="button" aria-label="Remove photo" onClick={()=>removePhoto(p)} className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white text-xs flex items-center justify-center focus-ring">✕</button>
+                {p.is_primary
+                  ? <span className="absolute bottom-0 inset-x-0 text-[9px] font-bold text-center text-white bg-[var(--purple)] py-0.5">MAIN</span>
+                  : <button type="button" onClick={()=>makeMain(p)} className="absolute bottom-0 inset-x-0 text-[9px] font-bold text-center text-white bg-black/60 py-0.5 focus-ring">Make main</button>}
+              </div>
+            ))}
+            {photos.length<MAX_PRODUCT_PHOTOS && (
+              <label className="aspect-square rounded-lg border-2 border-dashed border-[var(--line)] flex flex-col items-center justify-center gap-0.5 cursor-pointer text-[var(--muted)] focus-ring">
+                <span className="text-lg">{busy==='photos'?'⏳':'＋'}</span>
+                <span className="text-[10px] font-semibold">{busy==='photos'?'Uploading':'Add photos'}</span>
+                <input type="file" accept="image/*" multiple onChange={addPhotos} disabled={!!busy} className="hidden" />
+              </label>
+            )}
+          </div>
+        )}
+        <div className="text-[10px] text-[var(--muted)] mt-1">The main photo shows on cards and lists; shoppers swipe through the rest on the product page. Photos are resized automatically.</div>
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-[var(--muted)]">Product video <span className="font-normal">(1 short clip, under {MAX_VIDEO_MB}MB)</span></label>
+        {loading ? null : video ? (
+          <div className="mt-1.5 rounded-lg overflow-hidden border border-[var(--line)] relative bg-black">
+            <video src={video.video_url+'#t=0.1'} controls playsInline preload="metadata" className="w-full max-h-52" />
+            <button type="button" onClick={removeVideo} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white text-xs flex items-center justify-center focus-ring" aria-label="Remove video">✕</button>
+          </div>
+        ) : (
+          <label className="mt-1.5 flex items-center justify-center gap-2 border-2 border-dashed border-[var(--line)] rounded-lg py-4 cursor-pointer text-sm font-semibold text-[var(--muted)] focus-ring">
+            {busy==='video' ? '⏳ Uploading video…' : '🎬 Add a video clip'}
+            <input type="file" accept="video/*" onChange={addVideo} disabled={!!busy} className="hidden" />
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProductPage({route}){
   const id = route.parts[1];
   const {productMap, products, cart, addToCart, setCartQty, removeFromCart, wishlist, toggleWishlist, address, showToast} = useApp();
@@ -3012,8 +3285,7 @@ function ProductPage({route}){
   return (
     <div className="fade-in px-4 md:container-max md:mx-auto py-4 pb-10">
       <div className="md:grid md:grid-cols-2 md:gap-10">
-        <div className="relative">
-          <ProductImg product={product} className="w-full aspect-square text-7xl md:rounded-2xl" />
+        <ProductGallery product={product}>
           <div className="absolute top-3 right-3 flex flex-col gap-2">
             <button aria-label="Toggle wishlist" onClick={()=>toggleWishlist(product.id)}
               className="w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring hover:scale-110 transition-transform">
@@ -3024,7 +3296,7 @@ function ProductPage({route}){
               <Icon.Share />
             </button>
           </div>
-        </div>
+        </ProductGallery>
         <div className="mt-4 md:mt-0">
           <h1 className="font-display font-bold text-xl md:text-2xl">{product.name}</h1>
           {product.rating > 0 ? (
@@ -4992,41 +5264,6 @@ function AdminProductFormModal({item, allItems, onSaved, onClose}){
     return Array.from(set).sort();
   },[allItems, item.category]);
   const [saving, setSaving] = useState(false);
-  const [imageUrl, setImageUrl] = useState(null);
-  const [imageLoading, setImageLoading] = useState(true);
-  const [uploadingImage, setUploadingImage] = useState(false);
-
-  useEffect(()=>{
-    sbAdmin.from('product_images').select('image_url').eq('product_id', item.id).eq('is_primary', true).maybeSingle()
-      .then(({data})=>{ setImageUrl(data ? data.image_url : null); setImageLoading(false); });
-  },[item.id]);
-
-  const onImageUpload = async (e)=>{
-    const file = e.target.files && e.target.files[0];
-    if(!file) return;
-    if(file.size > 2*1024*1024){ showToast('Please choose an image under 2MB','⚠️'); return; }
-    setUploadingImage(true);
-    const path = item.id+'/'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9.\-_]/g,'');
-    const { error: upErr } = await sbAdmin.storage.from('product-images').upload(path, file, { upsert:true });
-    if(upErr){ setUploadingImage(false); showToast('Upload failed','⚠️'); return; }
-    const { data: pub } = sbAdmin.storage.from('product-images').getPublicUrl(path);
-    const { data: existing } = await sbAdmin.from('product_images').select('id').eq('product_id', item.id).eq('is_primary', true).maybeSingle();
-    if(existing){
-      await sbAdmin.from('product_images').update({ object_path: path, image_url: pub.publicUrl }).eq('id', existing.id);
-    } else {
-      await sbAdmin.from('product_images').insert({ product_id: item.id, object_path: path, image_url: pub.publicUrl, is_primary: true, sort_order: 0 });
-    }
-    setImageUrl(pub.publicUrl);
-    setUploadingImage(false);
-    showToast('Photo uploaded','📸');
-  };
-
-  const removeImage = async ()=>{
-    const { data: existing } = await sbAdmin.from('product_images').select('id').eq('product_id', item.id).eq('is_primary', true).maybeSingle();
-    if(existing) await sbAdmin.from('product_images').delete().eq('id', existing.id);
-    setImageUrl(null);
-  };
-
   const save = async ()=>{
     const price = Number(form.price), qty = Number(form.qty);
     if(!form.price || isNaN(price) || price<0){ showToast('Enter a valid price','⚠️'); return; }
@@ -5067,23 +5304,7 @@ function AdminProductFormModal({item, allItems, onSaved, onClose}){
           <datalist id="subcat-suggestions">{subcategorySuggestions.map(s=> <option key={s} value={s} />)}</datalist>
           <div className="text-[10px] text-[var(--muted)] mt-1">Groups this product under {item.category} on the storefront — e.g. School Essentials → Lunch Boxes, Cups/Mugs, Pouches.</div>
         </div>
-        <div>
-          <label className="text-xs font-semibold text-[var(--muted)]">Product Photo</label>
-          {imageLoading ? (
-            <div className="mt-1 h-24 rounded-lg skeleton"></div>
-          ) : imageUrl ? (
-            <div className="mt-1 relative rounded-lg overflow-hidden border border-[var(--line)]">
-              <img src={imageUrl} alt={item.name} className="w-full h-28 object-cover" />
-              <button type="button" onClick={removeImage} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 shadow flex items-center justify-center focus-ring"><Icon.Close/></button>
-            </div>
-          ) : (
-            <label className="mt-1 flex flex-col items-center justify-center gap-1 border-2 border-dashed border-[var(--line)] rounded-lg h-24 cursor-pointer hover:bg-gray-50 focus-ring">
-              <span className="text-lg">{uploadingImage ? '⏳' : '📷'}</span>
-              <span className="text-xs font-semibold text-[var(--muted)]">{uploadingImage ? 'Uploading…' : 'Tap to upload a photo'}</span>
-              <input type="file" accept="image/*" onChange={onImageUpload} disabled={uploadingImage} className="hidden" />
-            </label>
-          )}
-        </div>
+        <ProductMediaEditor item={item} />
         <div className="grid grid-cols-2 gap-3">
           <div><label className="text-xs font-semibold text-[var(--muted)]">Selling Price (₹)</label><input type="number" value={form.price} onChange={e=>setForm({...form,price:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
           <div><label className="text-xs font-semibold text-[var(--muted)]">Stock Quantity</label><input type="number" value={form.qty} onChange={e=>setForm({...form,qty:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
