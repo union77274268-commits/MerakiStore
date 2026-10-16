@@ -6604,7 +6604,6 @@ function AdminNotify(){
     if(!q) return [];
     return (products||[]).filter(p=> (p.name||'').toLowerCase().includes(q)).slice(0,6);
   },[prodQuery, products]);
-  const pickedProduct = useMemo(()=> (products||[]).find(p=> url==='#/product/'+p.id), [url, products]);
   const PRESETS = [
     {label:'New arrivals', title:'🆕 New arrivals just landed!', body:'Fresh stationery & toys are on the shelves. Come take a look.', url:'#/home'},
     {label:'Sale / offer', title:'🔥 Special offer this week', body:'Great picks at friendly prices — tap to shop.', url:'#/home'},
@@ -6616,6 +6615,7 @@ function AdminNotify(){
   const [image, setImage] = useState('');
   const [cta, setCta] = useState('Shop now');
   const [uploadingImg, setUploadingImg] = useState(false);
+  const pickedProduct = useMemo(()=> (products||[]).find(p=> url==='#/product/'+p.id), [url, products]);
   const [sending, setSending] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [result, setResult] = useState(null);
