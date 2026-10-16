@@ -6,13 +6,18 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('push', (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: 'Meraki', body: event.data ? event.data.text() : '' }; }
-  event.waitUntil(self.registration.showNotification(d.title || 'Meraki', {
+  const opts = {
     body: d.body || '',
-    icon: 'icon-192.png',
-    badge: 'icon-192.png',
+    icon: 'icon-192.png',      // large picture shown on the right of the notification
+    badge: 'badge-96.png',     // small monochrome icon in the status bar
     tag: d.tag || undefined,
+    timestamp: Date.now(),
+    vibrate: [120, 60, 120],
     data: { url: d.url || '#/home' },
-  }));
+  };
+  if (d.image) opts.image = d.image; // big banner picture under the text
+  if (d.cta) opts.actions = [{ action: 'open', title: d.cta }];
+  event.waitUntil(self.registration.showNotification(d.title || 'Meraki', opts));
 });
 
 self.addEventListener('notificationclick', (event) => {

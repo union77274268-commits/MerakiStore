@@ -6587,10 +6587,36 @@ function AdminNotify(){
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [url, setUrl] = useState('#/home');
+  const [image, setImage] = useState('');
+  const [cta, setCta] = useState('Shop now');
+  const [uploadingImg, setUploadingImg] = useState(false);
   const [sending, setSending] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [result, setResult] = useState(null);
 
+  // Notification pictures look best wide (2:1) — crop to 1024×512 JPEG before upload so it's light and never squashed.
+  const onPickImage = async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!file) return;
+    if(!/^image\//.test(file.type)){ showToast('Please choose an image','⚠️'); return; }
+    setUploadingImg(true);
+    try{
+      let blob = file;
+      try{
+        const bmp = await createImageBitmap(file);
+        const W=1024, H=512, c=document.createElement('canvas'); c.width=W; c.height=H;
+        const r = Math.max(W/bmp.width, H/bmp.height), w = bmp.width*r, h = bmp.height*r;
+        c.getContext('2d').drawImage(bmp,(W-w)/2,(H-h)/2,w,h);
+        blob = await new Promise(res=>c.toBlob(res,'image/jpeg',0.85));
+      }catch(err){ /* fall back to the original file */ }
+      const path = 'notifications/'+Date.now()+'.jpg';
+      const { error } = await sbAdmin.storage.from('banner-images').upload(path, blob, { upsert:true, contentType:'image/jpeg' });
+      if(error) throw error;
+      setImage(sbAdmin.storage.from('banner-images').getPublicUrl(path).data.publicUrl);
+    }catch(err){ showToast('Image upload failed','⚠️'); }
+    finally{ setUploadingImg(false); }
+  };
   const send = async ()=>{
     setSending(true); setResult(null);
     try{
@@ -6598,7 +6624,7 @@ function AdminNotify(){
       const res = await fetch(SUPABASE_URL+'/functions/v1/send-push', {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess.session.access_token,'apikey':SUPABASE_ANON_KEY},
-        body: JSON.stringify({type:'broadcast', title: title.trim(), body: text.trim(), url}),
+        body: JSON.stringify({type:'broadcast', title: title.trim(), body: text.trim(), url, image: image || undefined, cta: cta.trim() || undefined}),
       });
       const j = await res.json();
       if(!res.ok){ showToast(j.error || 'Could not send','⚠️'); setResult({error:j.error||'Failed'}); }
@@ -6635,11 +6661,39 @@ function AdminNotify(){
             <option value="#/category/notebooks-diaries">Notebooks &amp; Diaries</option>
           </select>
         </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Picture <span className="font-normal">(optional — wide pictures look best, it's cropped to 2:1)</span></label>
+          {image ? (
+            <div className="mt-1.5 relative">
+              <img src={image} alt="Notification picture" className="w-full rounded-xl border border-[var(--line)]" style={{aspectRatio:'2 / 1', objectFit:'cover'}} />
+              <button type="button" onClick={()=>setImage('')} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white text-sm focus-ring" aria-label="Remove picture">✕</button>
+            </div>
+          ) : (
+            <label className="mt-1.5 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--line)] py-5 text-sm font-semibold text-[var(--purple)] cursor-pointer">
+              {uploadingImg ? 'Uploading…' : '🖼️ Add a picture'}
+              <input type="file" accept="image/*" onChange={onPickImage} disabled={uploadingImg} className="sr-only" />
+            </label>
+          )}
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Button label <span className="font-normal">({cta.length}/20)</span></label>
+          <input value={cta} maxLength={20} onChange={e=>setCta(e.target.value)} placeholder="e.g. Shop now" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+        </div>
         {ready && (
-          <div className="rounded-xl border border-[var(--line)] p-3 bg-[var(--purple-light)]">
-            <div className="text-[10px] font-bold text-[var(--muted)] mb-1">PREVIEW</div>
-            <div className="text-sm font-bold">{title}</div>
-            <div className="text-xs text-[var(--muted)] mt-0.5">{text}</div>
+          <div>
+            <div className="text-[10px] font-bold text-[var(--muted)] mb-1">PREVIEW (approximate — your phone's style may differ)</div>
+            <div className="rounded-2xl p-3 text-white" style={{background:'#2b2b2f'}}>
+              <div className="flex items-center gap-1.5 text-[11px] opacity-80 mb-1.5"><span className="w-4 h-4 rounded-full bg-[var(--purple)] text-white flex items-center justify-center text-[9px] font-bold">M</span>Meraki · now</div>
+              <div className="flex gap-2.5 items-start">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold leading-snug">{title}</div>
+                  <div className="text-xs opacity-80 mt-0.5 leading-snug">{text}</div>
+                </div>
+                <div className="w-10 h-10 rounded-lg flex-shrink-0 bg-[var(--purple)] text-white flex items-center justify-center font-bold">M</div>
+              </div>
+              {image && <img src={image} alt="" className="w-full rounded-xl mt-2.5" style={{aspectRatio:'2 / 1', objectFit:'cover'}} />}
+              {cta.trim() && <div className="text-xs font-bold mt-2.5" style={{color:'#B9A2FF'}}>{cta.trim().toUpperCase()}</div>}
+            </div>
           </div>
         )}
         {!confirm ? (
