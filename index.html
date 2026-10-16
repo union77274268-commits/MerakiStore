@@ -3022,14 +3022,13 @@ function useProductMedia(productId){
     let cancelled = false;
     setMedia({ images: [], video: null, loaded: false });
     if(!productId) return;
-    Promise.all([
-      sb.from('product_images').select('image_url, is_primary, sort_order').eq('product_id', productId).order('is_primary', {ascending:false}).order('sort_order').order('created_at'),
-      sb.from('product_videos').select('video_url').eq('product_id', productId).maybeSingle(),
-    ]).then(([imgs, vid])=>{
+    // Shoppers can't read the items table directly, so media comes through a small public function
+    // that only returns pictures/video for products that are visible in the store.
+    sb.rpc('get_product_media', { p_product_id: productId }).then(({data})=>{
       if(cancelled) return;
       setMedia({
-        images: (imgs.data||[]).map(r=>r.image_url).filter(Boolean),
-        video: (vid.data && vid.data.video_url) || null,
+        images: Array.isArray(data && data.images) ? data.images.filter(Boolean) : [],
+        video: (data && data.video) || null,
         loaded: true,
       });
     }).catch(()=>{ if(!cancelled) setMedia(m=>({...m, loaded:true})); });
