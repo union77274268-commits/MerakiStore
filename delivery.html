@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#6C3FC5" />
+<meta name="robots" content="noindex" />
+<title>Meraki Delivery</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F8F6FC; --card:#fff; --ink:#241A38; --muted:#7D7391; --line:#EDE7F7;
+    --purple:#6C3FC5; --purple-dark:#4E2A96; --purple-light:#F1EBFB;
+    --green:#1E9E5A; --green-light:#E7F8EE; --amber:#B7791F; --amber-light:#FFF4DC; --danger:#E0455D; --danger-light:#FDECEF;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#08080a; --card:#121215; --ink:#F1ECFB; --muted:#9A92AE; --line:#26262b; --purple-light:#241b38; --green-light:#0f2a1d; --amber-light:#2b2210; --danger-light:#2b1218; }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Quicksand',system-ui,sans-serif;}
+  body{min-height:100vh;min-height:100dvh;}
+  button{font-family:inherit;cursor:pointer;}
+  a{color:inherit;}
+  .wrap{max-width:560px;margin:0 auto;padding:0 14px 40px;}
+  header.top{position:sticky;top:0;z-index:20;background:var(--purple);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;gap:10px;}
+  header.top .title{flex:1;min-width:0;}
+  header.top .title b{display:block;font-size:16px;line-height:1.1;}
+  header.top .title span{font-size:11px;opacity:.85;}
+  .iconbtn{background:rgba(255,255,255,.18);border:0;color:#fff;width:38px;height:38px;border-radius:50%;font-size:16px;}
+  .tabs{display:flex;gap:6px;padding:12px 0 4px;overflow-x:auto;}
+  .tab{flex:1;white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:9px 12px;font-size:13px;font-weight:700;}
+  .tab.on{background:var(--purple);border-color:var(--purple);color:#fff;}
+  .tab small{opacity:.8;font-weight:600;margin-left:4px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px;margin-top:12px;box-shadow:0 8px 20px -12px rgba(108,63,197,.25);}
+  .row{display:flex;align-items:center;gap:8px;}
+  .between{justify-content:space-between;}
+  .muted{color:var(--muted);}
+  .small{font-size:12px;}
+  .oid{font-weight:800;font-size:14px;}
+  .badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800;}
+  .b-purple{background:var(--purple-light);color:var(--purple);} .b-green{background:var(--green-light);color:var(--green);}
+  .b-amber{background:var(--amber-light);color:var(--amber);} .b-gray{background:var(--line);color:var(--muted);}
+  .name{font-size:17px;font-weight:800;margin-top:8px;}
+  .addr{margin-top:4px;font-size:14px;line-height:1.45;}
+  .note{margin-top:8px;background:var(--amber-light);color:var(--amber);border-radius:12px;padding:8px 10px;font-size:12.5px;font-weight:600;}
+  .items{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;font-size:13px;}
+  .items div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;}
+  .pay{margin-top:10px;border-radius:14px;padding:10px 12px;font-weight:800;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .pay.cod{background:var(--amber-light);color:var(--amber);} .pay.paid{background:var(--green-light);color:var(--green);} .pay.pending{background:var(--danger-light);color:var(--danger);}
+  .btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .btn{flex:1;min-width:110px;border:0;border-radius:14px;padding:13px 10px;font-size:14px;font-weight:800;text-align:center;text-decoration:none;display:inline-block;}
+  .btn.primary{background:var(--purple);color:#fff;} .btn.primary:active{background:var(--purple-dark);}
+  .btn.green{background:var(--green);color:#fff;}
+  .btn.ghost{background:var(--purple-light);color:var(--purple);}
+  .btn.plain{background:transparent;border:1px solid var(--line);color:var(--muted);}
+  .btn:disabled{opacity:.55;}
+  .empty{text-align:center;padding:50px 10px;color:var(--muted);}
+  .empty .big{font-size:44px;}
+  .center{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:24px 18px;max-width:420px;margin:0 auto;}
+  .logo{font-size:44px;text-align:center;} h1{font-size:24px;text-align:center;margin:6px 0 2px;} .sub{text-align:center;color:var(--muted);font-size:13.5px;margin-bottom:18px;}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:12px 0 4px;}
+  input[type=text],input[type=email],input[type=password],input[type=tel]{width:100%;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;padding:13px 14px;font-size:16px;font-family:inherit;outline:none;}
+  input:focus{border-color:var(--purple);}
+  .msg{margin-top:12px;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:600;}
+  .msg.err{background:var(--danger-light);color:var(--danger);} .msg.ok{background:var(--green-light);color:var(--green);}
+  .link{background:none;border:0;color:var(--purple);font-weight:800;font-size:13.5px;padding:8px;width:100%;margin-top:6px;}
+  .modal-bg{position:fixed;inset:0;background:rgba(10,6,20,.6);z-index:50;display:flex;align-items:flex-end;justify-content:center;}
+  .modal{background:var(--card);width:100%;max-width:560px;border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:up .22s ease-out;}
+  @keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+  .otp{display:flex;justify-content:center;gap:10px;margin:16px 0 6px;}
+  .otp input{width:56px;height:64px;text-align:center;font-size:28px;font-weight:800;border-radius:14px;padding:0;}
+  .otp.shake{animation:shake .35s;} @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+  .success{text-align:center;padding:10px 0 4px;} .success .tick{width:72px;height:72px;border-radius:50%;background:var(--green);color:#fff;font-size:38px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;animation:pop .35s;}
+  @keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(70px + env(safe-area-inset-top));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:13px;font-weight:700;z-index:80;max-width:90vw;}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:r .7s linear infinite;vertical-align:-2px;}
+  @keyframes r{to{transform:rotate(360deg)}}
+  .noscript{padding:30px;text-align:center;}
+</style>
+</head>
+<body>
+<noscript><div class="noscript">Please enable JavaScript to use the Meraki delivery app.</div></noscript>
+<div id="app"></div>
+<div id="toast" class="toast" style="display:none" role="status"></div>
+
+<script>
+(function(){
+  'use strict';
+  var SUPABASE_URL = 'https://viefouzekrzoqaqpuaug.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpZWZvdXpla3J6b3FhcXB1YXVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyMTQ4ODIsImV4cCI6MjEwMDc5MDg4Mn0.BNVufdPxOHkxdIuuEZ4ny2KPABW9UR0t6x6v1_0hOBo';
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storageKey: 'meraki-delivery-auth', persistSession: true, autoRefreshToken: true }
+  });
+  var app = document.getElementById('app');
+  var state = { screen: 'loading', session: null, staff: null, orders: [], tab: 'ready', loading: false, mode: 'login', busyId: null, lastLoaded: null };
+  var pollTimer = null;
+
+  // ---------- helpers ----------
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function inr(n){ return '₹' + Number(n).toLocaleString('en-IN', {maximumFractionDigits: 2}); }
+  function digits(s){ return String(s || '').replace(/\D/g, ''); }
+  function ago(iso){
+    var m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (m < 1) return 'just now'; if (m < 60) return m + ' min ago';
+    var h = Math.round(m / 60); if (h < 24) return h + ' hr ago';
+    return Math.round(h / 24) + ' day(s) ago';
+  }
+  var toastTimer;
+  function toast(msg){
+    var t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block';
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.style.display = 'none'; }, 2600);
+  }
+  function setState(p){ for (var k in p) state[k] = p[k]; render(); }
+
+  // ---------- auth + staff profile ----------
+  async function boot(){
+    var r = await sb.auth.getSession();
+    state.session = r.data.session;
+    if (!state.session) { setState({ screen: 'auth' }); return; }
+    await loadStaff();
+  }
+  sb.auth.onAuthStateChange(function(ev, sess){
+    if (ev === 'SIGNED_OUT') { stopPolling(); state.session = null; state.staff = null; setState({ screen: 'auth' }); }
+  });
+  async function loadStaff(){
+    var r = await sb.from('delivery_staff').select('*').eq('user_id', state.session.user.id).maybeSingle();
+    if (r.error) { setState({ screen: 'error', errorMsg: 'Could not load your profile. Check your internet and try again.' }); return; }
+    state.staff = r.data;
+    if (!r.data) { setState({ screen: 'profile' }); return; }
+    if (!r.data.active) { setState({ screen: 'pending' }); return; }
+    setState({ screen: 'main' });
+    refresh(true); startPolling();
+  }
+  function startPolling(){
+    stopPolling();
+    pollTimer = setInterval(function(){ if (!document.hidden && !document.querySelector('.modal-bg')) refresh(true); }, 20000);
+  }
+  function stopPolling(){ clearInterval(pollTimer); pollTimer = null; }
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden && state.screen === 'main' && !document.querySelector('.modal-bg')) refresh(true);
+    if (!document.hidden && state.screen === 'pending') loadStaff();
+  });
+
+  async function refresh(silent){
+    if (!silent) setState({ loading: true });
+    var r = await sb.rpc('delivery_orders');
+    if (r.error) {
+      if (/not authorised/i.test(r.error.message || '')) { await loadStaff(); return; }
+      if (!silent) toast('Could not refresh — check your internet');
+      state.loading = false; render(); return;
+    }
+    state.orders = r.data || []; state.loading = false; state.lastLoaded = new Date(); render();
+  }
+
+  // ---------- views ----------
+  function authView(){
+    var signup = state.mode === 'signup';
+    return '<div class="center"><div class="logo">🛵</div><h1>Meraki Delivery</h1>' +
+      '<div class="sub">' + (signup ? 'Create your delivery partner account' : 'Sign in to see your deliveries') + '</div>' +
+      '<form id="authForm" autocomplete="on">' +
+      '<label for="em">Email</label><input id="em" type="email" inputmode="email" autocomplete="email" required />' +
+      '<label for="pw">Password</label><input id="pw" type="password" autocomplete="' + (signup ? 'new-password' : 'current-password') + '" minlength="6" required />' +
+      '<div id="authMsg"></div>' +
+      '<button class="btn primary" style="width:100%;margin-top:16px" type="submit">' + (signup ? 'Create account' : 'Sign in') + '</button></form>' +
+      '<button class="link" id="swapMode">' + (signup ? 'Already have an account? Sign in' : 'New delivery partner? Create an account') + '</button></div>';
+  }
+  function profileView(){
+    return '<div class="center"><div class="logo">👋</div><h1>Almost there</h1><div class="sub">Tell the shop who you are. The owner will approve you before you can see orders.</div>' +
+      '<form id="profileForm"><label for="fn">Full name</label><input id="fn" type="text" autocomplete="name" required maxlength="60" />' +
+      '<label for="ph">Phone number</label><input id="ph" type="tel" inputmode="numeric" autocomplete="tel" required maxlength="15" />' +
+      '<div id="profMsg"></div><button class="btn primary" style="width:100%;margin-top:16px" type="submit">Request access</button></form>' +
+      '<button class="link" id="logoutBtn">Sign out</button></div>';
+  }
+  function pendingView(){
+    return '<div class="center"><div class="logo">⏳</div><h1>Waiting for approval</h1>' +
+      '<div class="sub">Hi ' + esc(state.staff.full_name) + '! The shop owner needs to approve your account. Open this page again once they have.</div>' +
+      '<button class="btn primary" id="recheck">Check again</button><button class="link" id="logoutBtn">Sign out</button></div>';
+  }
+  function errorView(){
+    return '<div class="center"><div class="logo">⚠️</div><h1>Something went wrong</h1><div class="sub">' + esc(state.errorMsg || '') + '</div>' +
+      '<button class="btn primary" id="retryBoot">Try again</button><button class="link" id="logoutBtn">Sign out</button></div>';
+  }
+  function counts(){
+    var c = { ready: 0, coming: 0, done: 0 };
+    state.orders.forEach(function(o){ if (o.status === 'Out for Delivery') c.ready++; else if (o.status === 'Preparing Your Order') c.coming++; else if (o.status === 'Delivered') c.done++; });
+    return c;
+  }
+  function addrLines(a){
+    a = a || {};
+    var l1 = [a.line1, a.landmark ? '(' + a.landmark + ')' : ''].filter(Boolean).join(' ');
+    var l2 = [a.area, a.city, a.pincode].filter(Boolean).join(', ');
+    return { l1: l1, l2: l2, full: [a.line1, a.landmark, a.area, a.city, a.pincode].filter(Boolean).join(', ') };
+  }
+  function payBlock(o){
+    if (o.payment_status === 'cod') return '<div class="pay cod"><span>💵 Collect cash</span><span>' + inr(o.total) + '</span></div>';
+    if (o.payment_status === 'paid') return '<div class="pay paid"><span>✅ Paid online</span><span>' + inr(o.total) + '</span></div>';
+    return '<div class="pay pending"><span>⚠️ Payment not confirmed — ask the shop before handing over</span></div>';
+  }
+  function orderCard(o){
+    var a = o.shipping_address || {}, ad = addrLines(a), ph = digits(a.phone);
+    var items = (o.items || []).map(function(i){ return '<div><span>' + esc(i.name) + '</span><b>× ' + esc(i.qty) + '</b></div>'; }).join('');
+    var badge = o.status === 'Out for Delivery' ? (o.claimed_by_me ? '<span class="badge b-green">Yours</span>' : '<span class="badge b-purple">Ready</span>')
+              : o.status === 'Delivered' ? '<span class="badge b-green">Delivered ✓</span>' : '<span class="badge b-gray">Being packed</span>';
+    var btns = '';
+    if (o.status === 'Out for Delivery') {
+      btns += ph ? '<a class="btn ghost" href="tel:' + esc(ph) + '">📞 Call</a>' : '';
+      btns += ad.full ? '<a class="btn ghost" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ad.full) + '">🧭 Navigate</a>' : '';
+      if (!o.claimed_by_me) btns += '<button class="btn primary" data-act="claim" data-id="' + esc(o.order_id) + '"' + (state.busyId === o.order_id ? ' disabled' : '') + '>🛵 Pick up this order</button>';
+      else {
+        btns += o.otp_locked ? '<div class="note" style="flex-basis:100%">🔒 Too many wrong codes. Please call the shop to complete this order.</div>'
+                             : '<button class="btn green" data-act="deliver" data-id="' + esc(o.order_id) + '">✅ Mark delivered (OTP)</button>';
+        btns += '<button class="btn plain" data-act="release" data-id="' + esc(o.order_id) + '">Release</button>';
+      }
+    }
+    return '<div class="card"><div class="row between"><span class="oid">#' + esc(o.short_id) + '</span>' + badge + '</div>' +
+      '<div class="small muted">' + (o.status === 'Delivered' && o.delivered_at ? 'Delivered ' + ago(o.delivered_at) : 'Ordered ' + ago(o.created_at)) + '</div>' +
+      '<div class="name">' + esc(a.name || 'Customer') + '</div>' +
+      '<div class="addr">' + esc(ad.l1 || '—') + '<br><span class="muted">' + esc(ad.l2) + '</span></div>' +
+      (ph ? '<div class="small muted" style="margin-top:4px">📱 ' + esc(a.phone) + '</div>' : '') +
+      ((a.instructions || o.notes) ? '<div class="note">📝 ' + esc(a.instructions || o.notes) + '</div>' : '') +
+      '<div class="items">' + items + '</div>' + (o.status !== 'Delivered' ? payBlock(o) : '') +
+      (btns ? '<div class="btns">' + btns + '</div>' : '') + '</div>';
+  }
+  function mainView(){
+    var c = counts(), list = state.orders.filter(function(o){
+      return state.tab === 'ready' ? o.status === 'Out for Delivery' : state.tab === 'coming' ? o.status === 'Preparing Your Order' : o.status === 'Delivered';
+    });
+    if (state.tab === 'ready') list.sort(function(a, b){ return (b.claimed_by_me ? 1 : 0) - (a.claimed_by_me ? 1 : 0); });
+    var empty = { ready: ['📭', 'No orders to deliver right now', 'New ones appear here when the shop marks them Out for Delivery.'],
+                  coming: ['📦', 'Nothing being packed', ''], done: ['🏁', 'No deliveries completed yet today', ''] }[state.tab];
+    return '<header class="top"><div class="title"><b>Hi, ' + esc((state.staff.full_name || '').split(' ')[0]) + ' 🛵</b><span>' +
+      (state.lastLoaded ? 'Updated ' + state.lastLoaded.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'Loading…') + '</span></div>' +
+      '<button class="iconbtn" id="refreshBtn" aria-label="Refresh">' + (state.loading ? '<span class="spin"></span>' : '↻') + '</button>' +
+      '<button class="iconbtn" id="logoutBtn" aria-label="Sign out">⎋</button></header>' +
+      '<div class="wrap"><div class="tabs">' +
+      '<button class="tab ' + (state.tab === 'ready' ? 'on' : '') + '" data-tab="ready">To deliver<small>' + c.ready + '</small></button>' +
+      '<button class="tab ' + (state.tab === 'coming' ? 'on' : '') + '" data-tab="coming">Coming up<small>' + c.coming + '</small></button>' +
+      '<button class="tab ' + (state.tab === 'done' ? 'on' : '') + '" data-tab="done">Done today<small>' + c.done + '</small></button></div>' +
+      (list.length ? list.map(orderCard).join('') : '<div class="empty"><div class="big">' + empty[0] + '</div><b>' + empty[1] + '</b><div class="small" style="margin-top:6px">' + empty[2] + '</div></div>') +
+      '</div>';
+  }
+  function render(){
+    var keep = document.querySelector('.modal-bg'); // never wipe an open OTP dialog by a background refresh
+    if (keep && state.screen === 'main') return;
+    var v = state.screen === 'loading' ? '<div class="center"><div class="logo">🛵</div><div class="sub">Loading…</div></div>'
+      : state.screen === 'auth' ? authView() : state.screen === 'profile' ? profileView()
+      : state.screen === 'pending' ? pendingView() : state.screen === 'error' ? errorView() : mainView();
+    app.innerHTML = v; bind();
+  }
+
+  // ---------- events ----------
+  function $(id){ return document.getElementById(id); }
+  function bind(){
+    if ($('authForm')) {
+      $('swapMode').onclick = function(){ setState({ mode: state.mode === 'signup' ? 'login' : 'signup' }); };
+      $('authForm').onsubmit = async function(e){
+        e.preventDefault();
+        var em = $('em').value.trim(), pw = $('pw').value, msg = $('authMsg'), btn = e.target.querySelector('button[type=submit]');
+        btn.disabled = true; msg.innerHTML = '';
+        try {
+          if (state.mode === 'signup') {
+            var r = await sb.auth.signUp({ email: em, password: pw });
+            if (r.error) throw r.error;
+            if (!r.data.session) { msg.innerHTML = '<div class="msg ok">Check your email and tap the confirmation link, then sign in here.</div>'; btn.disabled = false; return; }
+            state.session = r.data.session; await loadStaff();
+          } else {
+            var s = await sb.auth.signInWithPassword({ email: em, password: pw });
+            if (s.error) throw s.error;
+            state.session = s.data.session; await loadStaff();
+          }
+        } catch (err) {
+          var m = (err && err.message) || 'Something went wrong';
+          if (/invalid login/i.test(m)) m = 'Wrong email or password.'; else if (/not confirmed/i.test(m)) m = 'Please confirm your email first (check your inbox).';
+          msg.innerHTML = '<div class="msg err">' + esc(m) + '</div>'; btn.disabled = false;
+        }
+      };
+    }
+    if ($('profileForm')) $('profileForm').onsubmit = async function(e){
+      e.preventDefault();
+      var fn = $('fn').value.trim(), ph = digits($('ph').value), msg = $('profMsg'), btn = e.target.querySelector('button[type=submit]');
+      if (ph.length < 10) { msg.innerHTML = '<div class="msg err">Enter a valid 10-digit phone number.</div>'; return; }
+      btn.disabled = true;
+      var r = await sb.from('delivery_staff').insert({ user_id: state.session.user.id, full_name: fn, phone: ph });
+      if (r.error) { msg.innerHTML = '<div class="msg err">Could not save: ' + esc(r.error.message) + '</div>'; btn.disabled = false; return; }
+      await loadStaff();
+    };
+    if ($('recheck')) $('recheck').onclick = function(){ loadStaff(); };
+    if ($('retryBoot')) $('retryBoot').onclick = function(){ boot(); };
+    if ($('logoutBtn')) $('logoutBtn').onclick = function(){ sb.auth.signOut(); };
+    if ($('refreshBtn')) $('refreshBtn').onclick = function(){ refresh(false); };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function(b){ b.onclick = function(){ setState({ tab: b.getAttribute('data-tab') }); }; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-act]'), function(b){
+      b.onclick = function(){ act(b.getAttribute('data-act'), b.getAttribute('data-id')); };
+    });
+  }
+
+  async function act(kind, id){
+    if (kind === 'claim') {
+      state.busyId = id; render();
+      var r = await sb.rpc('delivery_claim', { p_order: id });
+      state.busyId = null;
+      if (r.error) toast('Could not pick up — try again');
+      else if (!r.data) toast('Someone else already picked this up');
+      else toast('Order picked up 🛵');
+      await refresh(true);
+    } else if (kind === 'release') {
+      if (!confirm('Release this order so another delivery partner can take it?')) return;
+      var rr = await sb.rpc('delivery_release', { p_order: id });
+      toast(rr.error ? 'Could not release' : 'Order released'); await refresh(true);
+    } else if (kind === 'deliver') {
+      openOtp(state.orders.filter(function(o){ return o.order_id === id; })[0]);
+    }
+  }
+
+  // ---------- OTP dialog ----------
+  function openOtp(o){
+    if (!o) return;
+    var bg = document.createElement('div'); bg.className = 'modal-bg';
+    var cod = o.payment_status === 'cod';
+    bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-label="Confirm delivery"><div id="otpBody">' +
+      '<div class="oid">#' + esc(o.short_id) + ' · ' + esc((o.shipping_address || {}).name || 'Customer') + '</div>' +
+      (cod ? '<div class="pay cod" style="margin-top:10px"><span>💵 Collect cash first</span><span>' + inr(o.total) + '</span></div>' : '') +
+      '<div class="sub" style="margin:14px 0 0;text-align:left">Ask the customer for their 4-digit delivery code (shown in their Meraki app) and enter it below.</div>' +
+      '<div class="otp" id="otpBoxes">' + [0, 1, 2, 3].map(function(i){ return '<input inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="one-time-code" aria-label="Digit ' + (i + 1) + '" data-i="' + i + '">'; }).join('') + '</div>' +
+      '<div id="otpMsg" style="min-height:22px;text-align:center;font-size:13px;font-weight:700;color:var(--danger)"></div>' +
+      '<div class="btns"><button class="btn plain" id="otpCancel">Cancel</button><button class="btn green" id="otpOk" disabled>Confirm delivery</button></div></div></div>';
+    document.body.appendChild(bg);
+    var boxes = bg.querySelectorAll('#otpBoxes input'), ok = bg.querySelector('#otpOk'), msg = bg.querySelector('#otpMsg'), busy = false;
+    function code(){ return Array.prototype.map.call(boxes, function(b){ return b.value; }).join(''); }
+    function sync(){ ok.disabled = busy || code().length !== 4; }
+    function close(){ bg.remove(); render(); }
+    boxes[0].focus();
+    Array.prototype.forEach.call(boxes, function(b, i){
+      b.addEventListener('input', function(){
+        b.value = b.value.replace(/\D/g, '').slice(-1);
+        if (b.value && i < 3) boxes[i + 1].focus();
+        msg.textContent = ''; sync();
+        if (code().length === 4) submit();
+      });
+      b.addEventListener('keydown', function(e){ if (e.key === 'Backspace' && !b.value && i > 0) boxes[i - 1].focus(); });
+      b.addEventListener('paste', function(e){
+        var t = digits((e.clipboardData || window.clipboardData).getData('text')).slice(0, 4);
+        if (t.length) { e.preventDefault(); Array.prototype.forEach.call(boxes, function(x, j){ x.value = t[j] || ''; }); sync(); if (t.length === 4) submit(); }
+      });
+    });
+    bg.querySelector('#otpCancel').onclick = close;
+    bg.addEventListener('click', function(e){ if (e.target === bg && !busy) close(); });
+    document.addEventListener('keydown', function esc2(e){ if (!document.body.contains(bg)) { document.removeEventListener('keydown', esc2); return; } if (e.key === 'Escape' && !busy) close(); });
+    ok.onclick = submit;
+
+    async function submit(){
+      if (busy || code().length !== 4) return;
+      busy = true; ok.disabled = true; ok.innerHTML = '<span class="spin"></span> Checking…';
+      var r = await sb.rpc('delivery_complete', { p_order: o.order_id, p_otp: code() });
+      busy = false; ok.innerHTML = 'Confirm delivery';
+      var d = r.data || {};
+      if (r.error) { msg.textContent = 'Could not reach the server — check your internet and try again.'; sync(); return; }
+      if (d.ok) {
+        if (navigator.vibrate) navigator.vibrate(200);
+        bg.querySelector('#otpBody').innerHTML = '<div class="success"><div class="tick">✓</div><div class="oid" style="font-size:18px">Delivered!</div>' +
+          '<div class="muted small" style="margin-top:4px">#' + esc(o.short_id) + ' is marked as delivered.</div>' +
+          (cod ? '<div class="pay cod" style="margin-top:12px"><span>💵 Cash to hand to the shop</span><span>' + inr(o.total) + '</span></div>' : '') +
+          '<div class="btns"><button class="btn primary" id="otpDone">Done</button></div></div>';
+        bg.querySelector('#otpDone').onclick = function(){ close(); refresh(true); };
+        state.tab = 'done'; return;
+      }
+      var errs = { locked: 'Too many wrong codes. Please call the shop to complete this order.', already_delivered: 'This order was already delivered.',
+        claimed_by_other: 'Another delivery partner has this order.', not_out_for_delivery: 'This order is no longer out for delivery.',
+        not_found: 'Order not found.', no_otp: 'This order has no delivery code. Please call the shop.' };
+      if (d.error === 'wrong_otp') {
+        msg.textContent = 'Wrong code. ' + d.attempts_left + ' attempt' + (d.attempts_left === 1 ? '' : 's') + ' left.';
+        var wrap = bg.querySelector('#otpBoxes'); wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
+        Array.prototype.forEach.call(boxes, function(b){ b.value = ''; }); boxes[0].focus();
+        if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+      } else { msg.textContent = errs[d.error] || 'Something went wrong. Try again.'; if (d.error) setTimeout(function(){ close(); refresh(true); }, 2200); }
+      sync();
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
