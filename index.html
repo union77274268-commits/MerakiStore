@@ -6655,7 +6655,7 @@ function AdminNotify(){
         )}
         {result && !result.error && (
           <div className="text-sm rounded-xl bg-[var(--green-light)] text-[var(--green)] p-3 font-semibold">
-            Sent to {result.sent} of {result.total} device{result.total===1?'':'s'}{result.removed?` · ${result.removed} expired removed`:''}{result.failed?` · ${result.failed} failed`:''}.
+            Sent to {result.sent} of {result.total} device{result.total===1?'':'s'}{result.removed?` · ${result.removed} expired removed`:''}{result.failed?` · ${result.failed} failed`:''}.{result.errors && result.errors.length>0 && <div className="text-xs mt-1 font-normal">Details: {result.errors[0]}</div>}
           </div>
         )}
         <div className="text-[11px] text-[var(--muted)]">Order updates (confirmed, packed, out for delivery, delivered) are sent automatically whenever an order's status changes — you don't need to send those.</div>

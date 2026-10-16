@@ -1,5 +1,5 @@
 /* Meraki service worker — receives push notifications even when the app is closed. */
-const PAGE = new URL(self.location).searchParams.get('page') || '/';
+const PAGE = new URL(self.location.href).searchParams.get('page') || '/';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
@@ -17,12 +17,20 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '#/home';
+  const hash = (event.notification.data && event.notification.data.url) || '#/home';
+  const base = new URL(PAGE, self.location.origin).href.split('#')[0];
+  const target = base + hash;
   event.waitUntil((async () => {
-    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of all) {
-      if (new URL(c.url).pathname === PAGE) { await c.focus(); c.postMessage({ type: 'navigate', url }); return; }
+    let wins = [];
+    try { wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true }); } catch (e) {}
+    const mine = wins.find((c) => { try { return new URL(c.url).origin === self.location.origin; } catch (e) { return false; } });
+    if (mine) {
+      try { if ('focus' in mine) await mine.focus(); } catch (e) {}
+      mine.postMessage({ type: 'navigate', url: hash });
+      return;
     }
-    await self.clients.openWindow(self.location.origin + PAGE + url);
+    // App is closed: open it straight on the right screen. Fall back to the site root if that is refused.
+    try { await self.clients.openWindow(target); }
+    catch (e) { try { await self.clients.openWindow(self.registration.scope); } catch (e2) {} }
   })());
 });
