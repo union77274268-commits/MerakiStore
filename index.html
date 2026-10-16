@@ -3074,12 +3074,12 @@ function ProductGallery({product, children}){
   return (
     <div>
       <div className="relative">
-        <div ref={trackRef} onScroll={onScroll} className="flex overflow-x-auto snap-x snap-mandatory md:rounded-2xl" style={{scrollbarWidth:'none'}}>
+        <div ref={trackRef} onScroll={onScroll} className="flex overflow-x-auto snap-x snap-mandatory rounded-2xl" style={{scrollbarWidth:'none'}}>
           {slides.map((s,i)=>(
-            <div key={i} className="min-w-full snap-center aspect-square bg-black/5 flex items-center justify-center">
+            <div key={i} className="min-w-full snap-center aspect-square bg-black/5 flex items-center justify-center overflow-hidden">
               {s.type==='image'
                 ? <img src={s.url} alt={product.name+' photo '+(i+1)} loading={i===0?'eager':'lazy'} decoding="async" className="w-full h-full object-cover" />
-                : <video ref={videoRef} src={s.url+'#t=0.1'} controls playsInline preload="metadata" className="w-full h-full bg-black" style={{objectFit:'contain'}} />}
+                : <video ref={videoRef} src={s.url+'#t=0.1'} controls playsInline preload="metadata" className="w-full h-full bg-black" style={{objectFit:'cover'}} />}
             </div>
           ))}
         </div>
