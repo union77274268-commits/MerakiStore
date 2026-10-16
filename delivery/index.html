@@ -4,6 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#6C3FC5" />
+<meta name="application-name" content="Meraki Delivery" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Meraki Delivery" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="manifest" href="/delivery/manifest.json" />
 <meta name="robots" content="noindex" />
 <title>Meraki Delivery</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -377,6 +382,14 @@
       } else { msg.textContent = errs[d.error] || 'Something went wrong. Try again.'; if (d.error) setTimeout(function(){ close(); refresh(true); }, 2200); }
       sync();
     }
+  }
+
+  // Keep the delivery PWA's service worker scoped to /delivery/.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/delivery/sw.js', { scope: '/delivery/' })
+        .catch(function (err) { console.warn('Meraki Delivery service worker registration failed:', err); });
+    });
   }
 
   boot();
