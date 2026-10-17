@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="google-site-verification" content="B3NGrRjQnsN5EBUtFoG0Gz_WoZgbKLeNMj3eA_7lgE4" />
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#ffffff" id="themeColorMeta" />
 <link rel="manifest" href="manifest.webmanifest" />
-<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+<link rel="icon" type="image/png" sizes="48x48" href="favicon-48.png" />
+<link rel="shortcut icon" href="favicon.ico" />
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <title>Meraki — Stationery & Toys</title>
@@ -663,8 +667,9 @@ function AppProvider({children}){
   },[]);
 
   // --- passwordless sign-up / sign-in with a one-time code (email now; mobile once an SMS provider is enabled) ---
-  const sendEmailCode = useCallback(async (email)=>{
-    const { error } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser:true, data:{ otp_signup:true }, emailRedirectTo: location.origin+location.pathname } });
+  const sendEmailCode = useCallback(async (email, opts)=>{
+    const existingOnly = !!(opts && opts.existingOnly);
+    const { error } = await sb.auth.signInWithOtp({ email, options: existingOnly ? { shouldCreateUser:false } : { shouldCreateUser:true, data:{ otp_signup:true } } });
     return { error };
   },[]);
   const verifyEmailCode = useCallback(async (email, token)=> sb.auth.verifyOtp({ email, token, type:'email' }),[]);
@@ -681,12 +686,17 @@ function AppProvider({children}){
     fetchProfile(uid);
     return { data };
   },[fetchProfile]);
-  const sendPasswordReset = useCallback(async (email)=>{
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin+location.pathname });
-    return { error };
+  // Forgot password, code based: email a one-time code to an EXISTING account, then force a new password.
+  const sendPasswordReset = useCallback(async (email)=> sendEmailCode(email, { existingOnly:true }),[sendEmailCode]);
+  const verifyResetCode = useCallback(async (email, token)=>{
+    setRecovering(true);
+    const r = await sb.auth.verifyOtp({ email, token, type:'email' });
+    if(r.error) setRecovering(false);
+    return r;
   },[]);
   const updatePassword = useCallback(async (password)=> sb.auth.updateUser({ password }),[]);
-  const changeEmail = useCallback(async (email)=> sb.auth.updateUser({ email }, { emailRedirectTo: location.origin+location.pathname }),[]);
+  const changeEmail = useCallback(async (email)=> sb.auth.updateUser({ email }),[]);
+  const verifyEmailChange = useCallback(async (email, token)=> sb.auth.verifyOtp({ email, token, type:'email_change' }),[]);
   const reactivateAccount = useCallback(async ()=>{
     if(!session) return { error: new Error('Not logged in') };
     const { data, error } = await sb.from('customer_profiles').update({ deactivated_at: null }).eq('id', session.user.id).select().maybeSingle();
@@ -1140,7 +1150,7 @@ function AppProvider({children}){
     loggedIn, authLoading, session, customerProfile, profileLoading,
     signUp, signIn, signOut, updateProfile,
     authSheet, openAuthSheet, closeAuthSheet, openAuthScreen, authScreenOpen, skipAuth, guestSkipped, recovering, setRecovering, setupHidden, setSetupHidden,
-    sendEmailCode, verifyEmailCode, sendPhoneCode, verifyPhoneCode, finishAccountSetup, sendPasswordReset, updatePassword, changeEmail,
+    sendEmailCode, verifyEmailCode, sendPhoneCode, verifyPhoneCode, finishAccountSetup, sendPasswordReset, verifyResetCode, updatePassword, changeEmail, verifyEmailChange,
     reactivateAccount, deactivateAccount, deleteAccount, hasActiveOrders,
     darkMode, setDarkMode,
     showToast, toast, productMap, productsLoading,
@@ -3782,6 +3792,140 @@ function CheckoutStepper({step}){
   );
 }
 
+/* ---- Map pin picker (OpenStreetMap + Leaflet; search via Nominatim) ---- */
+const MAP_DEFAULT = { lat: 26.9124, lng: 75.7873 }; // Jaipur
+function MapPickerSheet({initial, onCancel, onConfirm}){
+  const { showToast } = useApp();
+  const boxRef = useRef(null);
+  const mapRef = useRef(null);
+  const geoTimer = useRef(null);
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [place, setPlace] = useState(null);   // { lat, lng, addr, label }
+  const [looking, setLooking] = useState(false);
+  const [noMap, setNoMap] = useState(false);
+
+  const reverse = useCallback((lat, lng)=>{
+    clearTimeout(geoTimer.current);
+    setLooking(true);
+    geoTimer.current = setTimeout(async ()=>{
+      try{
+        const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat='+lat+'&lon='+lng);
+        const j = await r.json();
+        setPlace({ lat, lng, addr: j.address || {}, label: j.display_name || '' });
+      }catch(e){ setPlace({ lat, lng, addr:{}, label:'' }); }
+      setLooking(false);
+    }, 500);
+  },[]);
+
+  useEffect(()=>{
+    if(!window.L || !boxRef.current){ setNoMap(true); return; }
+    const L = window.L;
+    const start = (initial && initial.lat && initial.lng) ? initial : MAP_DEFAULT;
+    const map = L.map(boxRef.current, { zoomControl:false, attributionControl:true }).setView([start.lat, start.lng], (initial && initial.lat) ? 17 : 13);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(map);
+    L.control.zoom({ position:'bottomright' }).addTo(map);
+    mapRef.current = map;
+    map.on('moveend', ()=>{ const c = map.getCenter(); reverse(c.lat, c.lng); });
+    const c0 = map.getCenter(); reverse(c0.lat, c0.lng);
+    setTimeout(()=>map.invalidateSize(), 250);
+    return ()=>{ clearTimeout(geoTimer.current); map.remove(); mapRef.current = null; };
+  },[]);
+
+  const search = async (e)=>{
+    if(e) e.preventDefault();
+    const t = q.trim(); if(t.length<3) return;
+    setSearching(true); setResults([]);
+    try{
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=in&q='+encodeURIComponent(t));
+      const j = await r.json();
+      setResults(j || []);
+      if(!j || !j.length) showToast('No places found — try a landmark or area name','🔍');
+    }catch(err){ showToast('Search failed — check your internet','⚠️'); }
+    setSearching(false);
+  };
+  const goTo = (lat, lng)=>{ if(mapRef.current) mapRef.current.setView([lat,lng], 17); setResults([]); };
+  const locate = ()=>{
+    if(!navigator.geolocation){ showToast('Location is not available on this device','⚠️'); return; }
+    navigator.geolocation.getCurrentPosition(
+      p=> goTo(p.coords.latitude, p.coords.longitude),
+      ()=> showToast('Allow location access, or search for your address instead','📍'),
+      { enableHighAccuracy:true, timeout:10000 });
+  };
+  const confirm = ()=>{
+    if(!place) return;
+    const a = place.addr || {};
+    const road = [a.house_number, a.road].filter(Boolean).join(' ');
+    onConfirm({
+      lat: Number(place.lat.toFixed(6)), lng: Number(place.lng.toFixed(6)),
+      line1: road || a.amenity || a.building || '',
+      area: a.suburb || a.neighbourhood || a.city_district || a.quarter || a.residential || '',
+      city: a.city || a.town || a.village || a.county || '',
+      pincode: (a.postcode||'').replace(/\D/g,'').slice(0,6),
+      label: place.label,
+    });
+  };
+
+  return ReactDOM.createPortal(
+    <div style={{position:'fixed', inset:0, zIndex:400, background:'#fff', display:'flex', flexDirection:'column'}}>
+      <div style={{padding:'10px 12px', borderBottom:'1px solid var(--line)', background:'#fff'}}>
+        <div className="flex items-center gap-2 mb-2">
+          <button onClick={onCancel} aria-label="Close map" className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center focus-ring flex-shrink-0">←</button>
+          <div className="font-display font-bold text-base flex-1">Pin your delivery spot</div>
+        </div>
+        <form onSubmit={search} className="flex gap-2">
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search area, landmark or address" className="flex-1 min-w-0 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          <button type="submit" disabled={searching} className="btn-primary px-4 text-xs flex-shrink-0 focus-ring">{searching?'…':'Search'}</button>
+        </form>
+        {results.length>0 && (
+          <div style={{maxHeight:'34vh', overflowY:'auto'}} className="mt-2 border border-[var(--line)] rounded-lg bg-white">
+            {results.map(r=>(
+              <button key={r.place_id} type="button" onClick={()=>goTo(parseFloat(r.lat), parseFloat(r.lon))} className="block w-full text-left text-xs px-3 py-2.5 border-b border-[var(--line)] last:border-0 hover:bg-gray-50 focus-ring">{r.display_name}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{position:'relative', flex:1, minHeight:0}}>
+        {noMap ? (
+          <div className="p-6 text-center text-sm text-[var(--muted)]">The map couldn't load. Check your connection, or go back and type your address.</div>
+        ) : (
+          <React.Fragment>
+            <div ref={boxRef} style={{position:'absolute', inset:0}} />
+            <div style={{position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-100%)', fontSize:36, lineHeight:1, pointerEvents:'none', zIndex:500, filter:'drop-shadow(0 2px 3px rgba(0,0,0,.35))'}}>📍</div>
+            <button type="button" onClick={locate} aria-label="Use my current location" style={{position:'absolute', right:12, top:12, zIndex:500}} className="w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center text-lg focus-ring">🎯</button>
+          </React.Fragment>
+        )}
+      </div>
+      <div style={{padding:'12px 14px calc(12px + env(safe-area-inset-bottom))', borderTop:'1px solid var(--line)', background:'#fff'}}>
+        <div className="text-xs text-[var(--muted)] mb-2" style={{minHeight:32}}>
+          {looking ? 'Finding address…' : (place && place.label ? place.label : 'Move the map so the pin sits exactly on your door or gate.')}
+        </div>
+        <button onClick={confirm} disabled={!place || looking || noMap} className="btn-primary w-full py-3 text-sm focus-ring">Confirm this location</button>
+      </div>
+    </div>, document.body);
+}
+
+// Small "pin on map" control used inside address forms.
+function PinField({lat, lng, onPicked, onClear}){
+  const [open, setOpen] = useState(false);
+  const has = !!(lat && lng);
+  return (
+    <div className="col-span-2">
+      <div className="card p-3 flex items-center gap-3" style={has?{background:'var(--green-light)'}:undefined}>
+        <span className="text-xl flex-shrink-0">{has?'✅':'📍'}</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold">{has?'Exact location pinned':'Pin exact location on map'}</div>
+          <div className="text-[11px] text-[var(--muted)]">{has?'Our delivery partner will navigate straight to this spot.':'Search or drag the map so delivery is precise.'}</div>
+        </div>
+        <button type="button" onClick={()=>setOpen(true)} className="btn-secondary px-3 py-2 text-xs flex-shrink-0 focus-ring">{has?'Change':'Open map'}</button>
+        {has && <button type="button" onClick={onClear} aria-label="Remove pin" className="text-[var(--muted)] text-sm px-1 focus-ring">✕</button>}
+      </div>
+      {open && <MapPickerSheet initial={has?{lat,lng}:null} onCancel={()=>setOpen(false)} onConfirm={(r)=>{ setOpen(false); onPicked(r); }} />}
+    </div>
+  );
+}
+
 function CheckoutAddressPage(){
   const {deliveryType, setDeliveryType, address, setAddress, cartLines, storeSettings} = useApp();
   const [form, setForm] = useState(address);
@@ -3871,6 +4015,9 @@ function CheckoutAddressPage(){
                   <input value={form.pincode} onChange={e=>update('pincode',e.target.value)} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
                   {errors.pincode && <div className="text-xs text-[var(--danger)] mt-1">{errors.pincode}</div>}
                 </div>
+                <PinField lat={form.lat} lng={form.lng}
+                  onPicked={(r)=>setForm(prev=>({...prev, lat:r.lat, lng:r.lng, line1: prev.line1.trim()?prev.line1:r.line1, area: r.area||prev.area, city: r.city||prev.city, pincode: r.pincode||prev.pincode}))}
+                  onClear={()=>setForm(prev=>({...prev, lat:null, lng:null}))} />
                 <div className="col-span-2">
                   <label className="text-xs font-semibold text-[var(--muted)]">Add Delivery Instructions (Optional)</label>
                   <textarea value={form.instructions} onChange={e=>update('instructions',e.target.value)} placeholder="E.g. Ring the bell, leave at door, etc." rows="2" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></textarea>
@@ -4098,6 +4245,7 @@ function CheckoutConfirmPage(){
                 <div className="text-sm font-semibold mt-1">{address.name}</div>
                 <div className="text-xs text-[var(--muted)] mt-0.5">{address.line1}, {address.area}, {address.city} - {address.pincode}</div>
                 <div className="text-xs text-[var(--muted)]">+91 {address.phone}</div>
+                {address.lat && address.lng && <div className="text-xs text-green-700 font-semibold mt-0.5">📍 Map pin set</div>}
               </div>
               <a href="#/checkout/address" className="text-xs font-bold text-[var(--purple)] focus-ring">Change</a>
             </div>
@@ -4729,8 +4877,8 @@ function AddressBookModal({onClose}){
 
   useEffect(()=>{ loadAddresses(); },[session]);
 
-  const startNew = ()=>{ setForm({label:'', name:address.name||'', phone:address.phone||'', line1:'', area:'', landmark:'', pincode:'', city:'Jaipur'}); setEditing('new'); };
-  const startEdit = (a)=>{ setForm({label:a.label||'', name:a.name||'', phone:a.phone||'', line1:a.address_line||'', area:a.locality||'', landmark:a.landmark||'', pincode:a.pincode||'', city:a.city||'Jaipur'}); setEditing(a.id); };
+  const startNew = ()=>{ setForm({label:'', name:address.name||'', phone:address.phone||'', line1:'', area:'', landmark:'', pincode:'', city:'Jaipur', lat:null, lng:null}); setEditing('new'); };
+  const startEdit = (a)=>{ setForm({label:a.label||'', name:a.name||'', phone:a.phone||'', line1:a.address_line||'', area:a.locality||'', landmark:a.landmark||'', pincode:a.pincode||'', city:a.city||'Jaipur', lat:a.latitude||null, lng:a.longitude||null}); setEditing(a.id); };
 
   const save = async ()=>{
     if(!form.name.trim() || !form.line1.trim() || !/^\d{6}$/.test(form.pincode||'')){
@@ -4742,6 +4890,7 @@ function AddressBookModal({onClose}){
       label: form.label || 'Home', name: form.name.trim(), phone: form.phone.trim(),
       address_line: form.line1.trim(), locality: form.area.trim(), landmark: form.landmark.trim() || null,
       pincode: form.pincode.trim(), city: form.city.trim() || 'Jaipur',
+      latitude: form.lat || null, longitude: form.lng || null,
     };
     const query = editing==='new'
       ? sb.from('customer_addresses').insert({...payload, customer_id: session.user.id, is_default: addresses.length===0}).select().maybeSingle()
@@ -4761,7 +4910,7 @@ function AddressBookModal({onClose}){
   };
 
   const applyAsDeliveryAddress = (a)=>{
-    setAddress(prev=>({...prev, name:a.name, phone:a.phone, line1:a.address_line, area:a.locality, landmark:a.landmark||'', pincode:a.pincode, city:a.city}));
+    setAddress(prev=>({...prev, name:a.name, phone:a.phone, line1:a.address_line, area:a.locality, landmark:a.landmark||'', pincode:a.pincode, city:a.city, lat:a.latitude||null, lng:a.longitude||null}));
   };
 
   const setDefault = async (a)=>{
@@ -4784,6 +4933,9 @@ function AddressBookModal({onClose}){
           <div><label className="text-xs font-semibold text-[var(--muted)]">Area</label><input value={form.area} onChange={e=>setForm({...form,area:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
           <div><label className="text-xs font-semibold text-[var(--muted)]">Landmark (optional)</label><input value={form.landmark} onChange={e=>setForm({...form,landmark:e.target.value})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
           <div><label className="text-xs font-semibold text-[var(--muted)]">PIN Code</label><input value={form.pincode} onChange={e=>setForm({...form,pincode:e.target.value.replace(/\D/g,'').slice(0,6)})} className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" /></div>
+          <div className="grid grid-cols-2"><PinField lat={form.lat} lng={form.lng}
+            onPicked={(r)=>setForm(prev=>({...prev, lat:r.lat, lng:r.lng, line1: (prev.line1||'').trim()?prev.line1:r.line1, area: r.area||prev.area, city: r.city||prev.city, pincode: r.pincode||prev.pincode}))}
+            onClear={()=>setForm(prev=>({...prev, lat:null, lng:null}))} /></div>
           <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 focus-ring">{saving ? 'Saving…' : 'Save Address'}</button>
         </div>
       </Modal>
@@ -4827,6 +4979,7 @@ function SettingsModal({onClose}){
   const [notifEmail, setNotifEmail] = useLocalState('meraki_settings_email', false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [addressBookOpen, setAddressBookOpen] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
   const {showToast, darkMode, setDarkMode, session} = useApp();
 
   const resetAllData = async ()=>{
@@ -4865,10 +5018,17 @@ function SettingsModal({onClose}){
         <div>
           <div className="font-bold text-sm mb-2">Notifications</div>
           <div className="flex flex-col gap-2">
-            <ToggleRow label="Push Notifications" sub="Order updates & offers" value={notifPush} onChange={setNotifPush} />
-            <ToggleRow label="WhatsApp Updates" sub="Delivery status on WhatsApp" value={notifWhatsapp} onChange={setNotifWhatsapp} />
-            <ToggleRow label="Email Updates" sub="Order receipts & offers" value={notifEmail} onChange={setNotifEmail} />
+            <NotificationsCard flush />
+            <EmailPrefsCard flush />
           </div>
+        </div>
+        <div>
+          <div className="font-bold text-sm mb-2">Login &amp; security</div>
+          <button onClick={()=>setSecurityOpen(true)} className="card p-3.5 w-full flex items-center gap-3 text-left focus-ring">
+            <span className="w-9 h-9 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0"><Icon.User/></span>
+            <div className="flex-1"><div className="text-sm font-semibold">Email &amp; password</div><div className="text-xs text-[var(--muted)]">Change your email or password</div></div>
+            <span className="text-[var(--muted)]">›</span>
+          </button>
         </div>
         <div>
           <div className="font-bold text-sm mb-2">Saved Addresses</div>
@@ -4900,6 +5060,7 @@ function SettingsModal({onClose}){
       </div>
     </Modal>
   {addressBookOpen && <AddressBookModal onClose={()=>setAddressBookOpen(false)} />}
+  {securityOpen && <SecurityModal onClose={()=>setSecurityOpen(false)} />}
   </React.Fragment>
   );
 }
@@ -5015,7 +5176,7 @@ function RewardsPage(){
 
 /* ============ Account control: email, password, deactivate, delete ============ */
 function SecurityModal({onClose}){
-  const { session, changeEmail, updatePassword, showToast } = useApp();
+  const { session, changeEmail, verifyEmailChange, updatePassword, showToast } = useApp();
   const currentEmail = (session && session.user && session.user.email) || '';
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -5023,6 +5184,8 @@ function SecurityModal({onClose}){
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState({ email:'', pw:'' });
   const [emailSent, setEmailSent] = useState(false);
+  const [ecode, setEcode] = useState('');
+  const [stage, setStage] = useState('new'); // 'new' = code sent to the new address, 'old' = second code sent to the old one
 
   const saveEmail = async ()=>{
     const v = email.trim();
@@ -5033,6 +5196,18 @@ function SecurityModal({onClose}){
     setBusy('');
     if(error){ setMsg(m=>({...m, email: friendlyAuthError(error)})); return; }
     setEmailSent(true);
+  };
+  const verifyChange = async ()=>{
+    const c = ecode.trim();
+    if(c.length<4){ setMsg(m=>({...m, email:'Enter the code from your email.'})); return; }
+    setBusy('email'); setMsg(m=>({...m, email:''}));
+    const target = stage==='new' ? email.trim() : currentEmail;
+    const { error } = await verifyEmailChange(target, c);
+    if(error){ setBusy(''); setMsg(m=>({...m, email: friendlyAuthError(error)})); return; }
+    const { data } = await sb.auth.getUser();
+    setBusy(''); setEcode('');
+    if(data && data.user && data.user.new_email && stage==='new'){ setStage('old'); return; }
+    showToast('Email updated ✅'); setEmailSent(false); setEmail(''); setStage('new');
   };
   const savePw = async ()=>{
     if(pw.length<6){ setMsg(m=>({...m, pw:'Password must be at least 6 characters.'})); return; }
@@ -5051,11 +5226,17 @@ function SecurityModal({onClose}){
           <div className="text-sm font-bold">Change email</div>
           <div className="text-xs text-[var(--muted)] mt-0.5">Now: <b>{currentEmail}</b></div>
           {emailSent ? (
-            <div className="mt-2 rounded-xl bg-[var(--green-light)] text-[var(--green)] text-xs font-semibold p-3">We've sent confirmation links to your old and new email. Tap the link in each to finish the change — until then your old email keeps working.</div>
+            <div className="mt-2">
+              <div className="rounded-xl bg-[var(--green-light)] text-[var(--green)] text-xs font-semibold p-3">{stage==='new' ? <>We sent a code to <b>{email.trim()}</b>. Enter it below to confirm the change.</> : <>Almost done — we also sent a code to your current email <b>{currentEmail}</b>. Enter that one too.</>}</div>
+              <input value={ecode} onChange={e=>setEcode(e.target.value.replace(/\D/g,'').slice(0,8))} inputMode="numeric" autoComplete="one-time-code" placeholder="Code" className="w-full mt-2 text-center tracking-[0.4em] text-lg font-bold border border-[var(--line)] rounded-lg px-3 py-2 focus-ring" />
+              {msg.email && <div className="text-xs text-[var(--danger)] mt-1">{msg.email}</div>}
+              <button onClick={verifyChange} disabled={busy==='email'} className="btn-primary w-full py-2 text-sm mt-2 focus-ring">{busy==='email' ? 'Checking…' : 'Confirm new email'}</button>
+              <button onClick={()=>{ setEmailSent(false); setStage('new'); setEcode(''); }} className="block mx-auto text-xs font-semibold text-[var(--muted)] mt-2 focus-ring">Use a different email</button>
+            </div>
           ) : (<>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="New email address" className="w-full mt-2 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
             {msg.email && <div className="text-xs text-[var(--danger)] mt-1">{msg.email}</div>}
-            <button onClick={saveEmail} disabled={busy==='email'} className="btn-secondary w-full py-2 text-sm mt-2 focus-ring">{busy==='email' ? 'Sending…' : 'Send confirmation'}</button>
+            <button onClick={saveEmail} disabled={busy==='email'} className="btn-secondary w-full py-2 text-sm mt-2 focus-ring">{busy==='email' ? 'Sending…' : 'Send me a code'}</button>
           </>)}
         </div>
         <div>
@@ -5144,8 +5325,7 @@ function AccountPage(){
     {IconC:Icon.MapPin, label:'Saved Addresses', sub:'1 saved address', action:()=>setEditing(true)},
     {IconC:Icon.Chat, label:'Help & Support', sub:'FAQs, contact us', action:()=>setHelpOpen(true)},
     {IconC:Icon.Store, label:'Store Information', sub:'Timing, location', action:()=>setStoreInfoOpen(true)},
-    {IconC:Icon.Settings, label:'Settings', sub:'App preferences', action:()=>setSettingsOpen(true)},
-    {IconC:Icon.User, label:'Email & password', sub:'Change your email or password', action:()=>setSecurityOpen(true)},
+    {IconC:Icon.Settings, label:'Settings', sub:'Notifications, email & password, app', action:()=>setSettingsOpen(true)},
   ];
 
   const confirmLogout = async ()=>{
@@ -5174,8 +5354,6 @@ function AccountPage(){
         </div>
         <span className="text-white/80">›</span>
       </a>
-      <NotificationsCard />
-      <EmailPrefsCard />
       <div className="flex flex-col gap-2">
         {sections.map(s=> s.href ? (
           <a key={s.label} href={s.href} className="card p-3.5 flex items-center gap-3 focus-ring">
@@ -5209,7 +5387,6 @@ function AccountPage(){
       </div>
       <div className="text-center text-xs text-[var(--muted)] mt-8">Meraki Stationery &amp; Toys · App version 1.0.0 (demo)</div>
 
-      {securityOpen && <SecurityModal onClose={()=>setSecurityOpen(false)} />}
       {deactivateOpen && <DeactivateModal onClose={()=>setDeactivateOpen(false)} />}
       {deleteOpen && <DeleteAccountModal onClose={()=>setDeleteOpen(false)} />}
       {editingProfile && <EditProfileModal onClose={()=>setEditingProfile(false)} />}
@@ -6482,7 +6659,7 @@ function AuthSheet(){
         <span className="w-11 h-11 rounded-2xl bg-[var(--purple-light)] flex items-center justify-center text-xl flex-shrink-0">{why[0]}</span>
         <div className="flex-1 min-w-0">
           <h3 className="font-display font-bold text-lg leading-tight">{step==='start' ? why[1] : 'Enter the code'}</h3>
-          <p className="text-xs text-[var(--muted)] mt-1">{step==='start' ? why[2] : (via==='email' ? <>We sent a code to <b>{target}</b>. If the email has a link instead, tap it.</> : <>We sent an SMS to <b>+91 {target}</b>.</>)}</p>
+          <p className="text-xs text-[var(--muted)] mt-1">{step==='start' ? why[2] : (via==='email' ? <>We sent a code to <b>{target}</b>. It can take a minute to arrive — check spam too.</> : <>We sent an SMS to <b>+91 {target}</b>.</>)}</p>
         </div>
         <button onClick={closeAuthSheet} aria-label="Close" className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center focus-ring"><Icon.Close /></button>
       </div>
@@ -6622,74 +6799,44 @@ function GuestGate({what}){
 }
 
 function LoggedOutScreen(){
-  const { signUp, signIn, showToast, skipAuth, sendPasswordReset } = useApp();
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'check-email' | 'forgot' | 'reset-sent'
+  const { signIn, showToast, skipAuth, sendEmailCode, verifyEmailCode, sendPasswordReset, verifyResetCode } = useApp();
+  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'forgot' | 'code-signup' | 'code-reset'
+  const [code, setCode] = useState('');
   const [form, setForm] = useState({ email:'', password:'', fullName:'', phone:'', username:'' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const update = (k,v)=> setForm(prev=>({...prev,[k]:v}));
 
+  const friendly = (err)=> friendlyAuthError(err);
   const submit = async (e)=>{
     e.preventDefault();
     setError('');
-    if(mode==='forgot'){
-      if(!/^\S+@\S+\.\S+$/.test(form.email.trim())){ setError('Enter the email you signed up with.'); return; }
+    const email = form.email.trim();
+    if(mode==='code-signup' || mode==='code-reset'){
+      if(code.trim().length<4){ setError('Enter the code from your email.'); return; }
       setSubmitting(true);
-      const { error: err } = await sendPasswordReset(form.email.trim());
+      const { error: err } = await (mode==='code-reset' ? verifyResetCode(email, code.trim()) : verifyEmailCode(email, code.trim()));
       setSubmitting(false);
-      if(err){ setError(/rate limit|seconds/i.test(err.message||'') ? 'Please wait a minute before asking again.' : (err.message || 'Could not send the email.')); return; }
-      setMode('reset-sent'); return;
+      if(err){ setError(friendly(err)); return; }
+      showToast(mode==='code-reset' ? 'Verified — choose a new password' : 'Verified ✅');
+      return;
     }
-    if(!form.email.trim() || !form.password){ setError('Email and password are required.'); return; }
-    if(mode==='signup' && form.password.length<6){ setError('Password must be at least 6 characters.'); return; }
+    if(mode==='forgot' || mode==='signup'){
+      if(!/^\S+@\S+\.\S+$/.test(email)){ setError(mode==='forgot' ? 'Enter the email you signed up with.' : 'Enter a valid email address.'); return; }
+      setSubmitting(true);
+      const { error: err } = await (mode==='forgot' ? sendPasswordReset(email) : sendEmailCode(email));
+      setSubmitting(false);
+      if(err){ setError(/signups? not allowed|not found/i.test(err.message||'') && mode==='forgot' ? "We couldn't find an account with that email." : friendly(err)); return; }
+      setCode(''); setMode(mode==='forgot' ? 'code-reset' : 'code-signup'); return;
+    }
+    if(!email || !form.password){ setError('Email and password are required.'); return; }
     setSubmitting(true);
-    if(mode==='signin'){
-      const { error: err } = await signIn({ email: form.email.trim(), password: form.password });
-      setSubmitting(false);
-      if(err){ setError(err.message); return; }
-      showToast('Welcome back! 👋','✨');
-    } else {
-      if(!form.fullName.trim()){ setError('Please enter your name.'); setSubmitting(false); return; }
-      const { error: err, needsEmailConfirmation } = await signUp({
-        email: form.email.trim(), password: form.password,
-        fullName: form.fullName.trim(), phone: form.phone.trim(), username: form.username.trim(),
-      });
-      setSubmitting(false);
-      if(err){ setError(err.message); return; }
-      if(needsEmailConfirmation){ setMode('check-email'); return; }
-      showToast('Account created! 🎉','✨');
-    }
+    const { error: err } = await signIn({ email, password: form.password });
+    setSubmitting(false);
+    if(err){ setError(err.message); return; }
+    showToast('Welcome back! 👋','✨');
   };
-
-  if(mode==='check-email'){
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in relative">
-        <AuthShellBackground />
-        <div className="card w-full max-w-sm p-8 shadow-xl">
-          <img src={MERAKI_LOGO_DATA_URI} alt="Meraki Stationery & Toys" className="w-20 h-20 mx-auto rounded-2xl shadow-md" />
-          <div className="text-6xl mt-6 mb-2">📬</div>
-          <h1 className="font-display font-bold text-xl mt-2">Almost there!</h1>
-          <p className="text-sm text-[var(--muted)] mt-2">We've sent a confirmation link to <b>{form.email}</b>. Tap it, then come back and log in.</p>
-          <button onClick={()=>setMode('signin')} className="btn-primary w-full py-3 text-sm mt-6 focus-ring">Back to Log In</button>
-        </div>
-      </div>
-    );
-  }
-
-  if(mode==='reset-sent'){
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in relative">
-        <AuthShellBackground />
-        <div className="card w-full max-w-sm p-8 shadow-xl">
-          <div className="text-6xl mb-2">📬</div>
-          <h1 className="font-display font-bold text-xl mt-2">Check your email</h1>
-          <p className="text-sm text-[var(--muted)] mt-2">If <b>{form.email}</b> has an account, we've sent a link to set a new password. Open it on this phone.</p>
-          <button onClick={()=>setMode('signin')} className="btn-primary w-full py-3 text-sm mt-6 focus-ring">Back to Log In</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 text-center fade-in relative">
@@ -6699,50 +6846,38 @@ function LoggedOutScreen(){
       </div>
 
       <div className="card w-full max-w-sm p-7 shadow-xl text-left rise-in">
-        {mode!=='forgot' && (
+        {(mode==='signin' || mode==='signup') && (
           <div className="flex gap-1 p-1 rounded-xl bg-gray-100 text-sm font-semibold mb-4">
             {[['signin','Log in'],['signup','Create account']].map(([k,l])=> <button key={k} type="button" onClick={()=>{ setMode(k); setError(''); }} className={"flex-1 py-2 rounded-lg focus-ring "+(mode===k?'bg-white shadow text-[var(--purple)]':'text-[var(--muted)]')}>{l}</button>)}
           </div>
         )}
-        <h1 className="font-display font-bold text-xl text-center">{mode==='signin' ? 'Welcome back! 👋' : mode==='forgot' ? 'Forgot your password? 🔑' : 'Create your account ✨'}</h1>
-        <p className="text-sm text-[var(--muted)] mt-1 text-center">{mode==='signin' ? 'Log in to shop, track orders and manage your wishlist.' : mode==='forgot' ? "Enter your email and we'll send you a link to set a new one." : 'Sign up to start shopping at Meraki.'}</p>
+        <h1 className="font-display font-bold text-xl text-center">{mode==='signin' ? 'Welcome back! 👋' : mode==='forgot' ? 'Forgot your password? 🔑' : mode==='signup' ? 'Create your account ✨' : 'Enter the code 📬'}</h1>
+        <p className="text-sm text-[var(--muted)] mt-1 text-center">{mode==='signin' ? 'Log in to shop, track orders and manage your wishlist.' : mode==='forgot' ? "Enter your email and we'll send you a code to set a new password." : mode==='signup' ? "Enter your email — we'll send a code to verify it, then you choose a password." : <>We sent a 6-digit code to <b>{form.email}</b>. It can take a minute — check spam too.</>}</p>
 
         <form onSubmit={submit} className="mt-6 space-y-3">
-          {mode==='signup' && (
-            <React.Fragment>
-              <div>
-                <label className="text-xs font-semibold text-[var(--muted)]">Full Name</label>
-                <div className="mt-1"><AuthInput icon="👤" value={form.fullName} onChange={e=>update('fullName',e.target.value)} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-[var(--muted)]">Username</label>
-                  <div className="mt-1"><AuthInput icon="@" value={form.username} onChange={e=>update('username',e.target.value)} /></div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-[var(--muted)]">Phone</label>
-                  <div className="mt-1"><AuthInput icon="📞" value={form.phone} onChange={e=>update('phone',e.target.value.replace(/\D/g,'').slice(0,10))} /></div>
-                </div>
-              </div>
-            </React.Fragment>
+          {(mode==='code-signup' || mode==='code-reset') ? (
+            <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,8))} inputMode="numeric" autoComplete="one-time-code" placeholder="••••••" autoFocus
+              className="w-full text-center tracking-[0.5em] text-2xl font-bold border border-[var(--line)] rounded-xl py-3 focus-ring bg-[#FBFAFE]" />
+          ) : (
+            <div>
+              <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
+              <div className="mt-1"><AuthInput icon="✉️" type="email" autoComplete="email" value={form.email} onChange={e=>update('email',e.target.value)} /></div>
+            </div>
           )}
-          <div>
-            <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
-            <div className="mt-1"><AuthInput icon="✉️" type="email" value={form.email} onChange={e=>update('email',e.target.value)} /></div>
-          </div>
-          {mode!=='forgot' && (
+          {mode==='signin' && (
           <div>
             <label className="text-xs font-semibold text-[var(--muted)]">Password</label>
-            <div className="mt-1"><AuthInput icon="🔒" type="password" autoComplete={mode==='signin'?'current-password':'new-password'} value={form.password} onChange={e=>update('password',e.target.value)} /></div>
-            {mode==='signin' && <button type="button" onClick={()=>{ setMode('forgot'); setError(''); }} className="text-xs font-bold text-[var(--purple)] mt-2 focus-ring">Forgot password?</button>}
+            <div className="mt-1"><AuthInput icon="🔒" type="password" autoComplete="current-password" value={form.password} onChange={e=>update('password',e.target.value)} /></div>
+            <button type="button" onClick={()=>{ setMode('forgot'); setError(''); }} className="text-xs font-bold text-[var(--purple)] mt-2 focus-ring">Forgot password?</button>
           </div>
           )}
           {error && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{error}</div>}
           <button type="submit" disabled={submitting} className="btn-primary w-full py-3 text-sm focus-ring mt-1">
-            {submitting ? 'Please wait…' : (mode==='signin' ? 'Log In' : mode==='forgot' ? 'Send reset link' : 'Create Account')}
+            {submitting ? 'Please wait…' : (mode==='signin' ? 'Log In' : (mode==='forgot' || mode==='signup') ? 'Send me a code' : 'Verify & continue')}
           </button>
         </form>
 
+        {(mode==='code-signup' || mode==='code-reset') && <button onClick={()=>{ setMode(mode==='code-reset'?'forgot':'signup'); setError(''); }} className="text-sm font-bold text-[var(--purple)] mt-5 focus-ring block mx-auto">← Change email</button>}
         {mode==='forgot' && <button onClick={()=>{ setMode('signin'); setError(''); }} className="text-sm font-bold text-[var(--purple)] mt-5 focus-ring block mx-auto">← Back to Log In</button>}
       </div>
       <button onClick={skipAuth} className="mt-5 text-sm font-bold text-[var(--purple)] focus-ring px-6 py-2.5 rounded-full border border-[var(--purple)]/30 bg-white/70">Skip for now — just browse</button>
@@ -7491,7 +7626,7 @@ function LastTapNote(){
   const when = new Date(note.t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
   return <div className="text-[10px] text-[var(--muted)] mt-2">Last notification tap: {when} — {note.result}{note.err?(' ('+note.err+')'):''}</div>;
 }
-function NotificationsCard(){
+function NotificationsCard({flush}){
   const p = usePushNotifications();
   const msg = {
     checking: 'Checking…',
@@ -7503,7 +7638,7 @@ function NotificationsCard(){
     on: 'On — you\'ll get order updates on this device.',
   }[p.state];
   return (
-    <div className="card p-4 mb-5">
+    <div className={"card p-4 "+(flush?'':'mb-5')}>
       <div className="flex items-start gap-3">
         <span className="w-10 h-10 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0 text-lg">🔔</span>
         <div className="flex-1 min-w-0">
@@ -7547,7 +7682,7 @@ function PushPromptBanner(){
 }
 
 /* ---- Account: email preferences ---- */
-function EmailPrefsCard(){
+function EmailPrefsCard({flush}){
   const { session, showToast } = useApp();
   const [prefs, setPrefs] = useState(null);
   const uid = session && session.user && session.user.id;
@@ -7567,7 +7702,7 @@ function EmailPrefsCard(){
   };
   const addr = prefs.email || (session.user && session.user.email) || '';
   return (
-    <div className="card p-4 mb-5">
+    <div className={"card p-4 "+(flush?'':'mb-5')}>
       <div className="flex items-start gap-3">
         <span className="w-10 h-10 rounded-full bg-[var(--purple-light)] text-[var(--purple)] flex items-center justify-center flex-shrink-0 text-lg">✉️</span>
         <div className="flex-1 min-w-0">
