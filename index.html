@@ -291,6 +291,9 @@ const sbAdmin = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { storageKey: 'meraki-admin-auth', persistSession: true, autoRefreshToken: true }
 });
 const SHOP_OWNER_ID = '536e1ccc-1790-4ae5-bd04-f4e9bf16b80c';
+// Mobile-number verification needs an SMS provider (Twilio etc.) switched on in Supabase → Authentication → Providers → Phone.
+// Until that is done keep this false; the sheet then offers email only. Set to true once SMS is configured.
+const PHONE_AUTH_ENABLED = false;
 const MERAKI_LOGO_DATA_URI = 'data:image/webp;base64,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';
 
 /* ============================= DATA ============================= */
@@ -568,6 +571,18 @@ function AppProvider({children}){
   const [cart, setCart] = useState(()=> readGuest('meraki_guest_cart').filter(c=> c && c.id && c.qty>0)); // [{id,qty}]
   const [wishlist, setWishlist] = useState(()=> readGuest('meraki_guest_wishlist').filter(x=> typeof x==='string')); // [id]
   const wasSignedIn = useRef(false);
+  // Guest browsing + the slide-up "sign in to continue" sheet
+  const [authSheet, setAuthSheet] = useState({open:false, reason:''});
+  const pendingActionRef = useRef(null);
+  const [authScreenOpen, setAuthScreenOpen] = useState(false);
+  const [guestSkippedAt, setGuestSkippedAt] = useState(()=>{ try{ return Number(localStorage.getItem('meraki_guest_skip')||0); }catch(e){ return 0; } });
+  const guestSkipped = (Date.now() - guestSkippedAt) < 7*24*3600*1000;
+  const [recovering, setRecovering] = useState(false);
+  const [setupHidden, setSetupHidden] = useState(false);
+  const openAuthSheet = useCallback((reason, pending)=>{ pendingActionRef.current = pending || null; setAuthSheet({open:true, reason: reason||''}); },[]);
+  const closeAuthSheet = useCallback(()=>{ setAuthSheet(a=>({...a, open:false})); },[]);
+  const openAuthScreen = useCallback(()=>{ setAuthSheet(a=>({...a, open:false})); setAuthScreenOpen(true); },[]);
+  const skipAuth = useCallback(()=>{ const t = Date.now(); try{ localStorage.setItem('meraki_guest_skip', String(t)); }catch(e){} setGuestSkippedAt(t); setAuthScreenOpen(false); },[]);
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [rewardBalance, setRewardBalance] = useState(0);
@@ -602,7 +617,9 @@ function AppProvider({children}){
       setAuthLoading(false);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, sess)=>{
+      if(_event==='PASSWORD_RECOVERY') setRecovering(true);
       setSession(sess);
+      if(sess){ setAuthScreenOpen(false); setAuthSheet(a=> a.open ? {...a, open:false} : a); }
     });
     return ()=> sub.subscription.unsubscribe();
   },[]);
@@ -644,11 +661,70 @@ function AppProvider({children}){
     return { data, error };
   },[]);
 
+  // --- passwordless sign-up / sign-in with a one-time code (email now; mobile once an SMS provider is enabled) ---
+  const sendEmailCode = useCallback(async (email)=>{
+    const { error } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser:true, data:{ otp_signup:true }, emailRedirectTo: location.origin+location.pathname } });
+    return { error };
+  },[]);
+  const verifyEmailCode = useCallback(async (email, token)=> sb.auth.verifyOtp({ email, token, type:'email' }),[]);
+  const sendPhoneCode = useCallback(async (phone)=>{
+    const { error } = await sb.auth.signInWithOtp({ phone:'+91'+phone, options:{ shouldCreateUser:true, data:{ otp_signup:true } } });
+    return { error };
+  },[]);
+  const verifyPhoneCode = useCallback(async (phone, token)=> sb.auth.verifyOtp({ phone:'+91'+phone, token, type:'sms' }),[]);
+  const finishAccountSetup = useCallback(async ({name, phone, password})=>{
+    const { data, error } = await sb.auth.updateUser({ password, data:{ full_name:name, phone, setup_done:true } });
+    if(error) return { error };
+    const uid = data.user.id;
+    await sb.from('customer_profiles').upsert({ id: uid, full_name: name, phone: phone || null, email: data.user.email || null });
+    fetchProfile(uid);
+    return { data };
+  },[fetchProfile]);
+  const sendPasswordReset = useCallback(async (email)=>{
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin+location.pathname });
+    return { error };
+  },[]);
+  const updatePassword = useCallback(async (password)=> sb.auth.updateUser({ password }),[]);
+  const changeEmail = useCallback(async (email)=> sb.auth.updateUser({ email }, { emailRedirectTo: location.origin+location.pathname }),[]);
+  const reactivateAccount = useCallback(async ()=>{
+    if(!session) return { error: new Error('Not logged in') };
+    const { data, error } = await sb.from('customer_profiles').update({ deactivated_at: null }).eq('id', session.user.id).select().maybeSingle();
+    if(!error) setCustomerProfile(data);
+    return { data, error };
+  },[session]);
+
   const signOut = useCallback(async ()=>{
     await detachPushFromThisDevice();
     await sb.auth.signOut();
     setCustomerProfile(null);
   },[]);
+
+  const hasActiveOrders = orders.some(o=> o.status!=='Delivered' && o.status!=='Cancelled');
+  const deactivateAccount = useCallback(async ()=>{
+    if(!session) return { error: new Error('Not logged in') };
+    if(hasActiveOrders) return { error: new Error('You have an order that is still on the way. You can deactivate once it is delivered.') };
+    const { error } = await sb.from('customer_profiles').update({ deactivated_at: new Date().toISOString() }).eq('id', session.user.id);
+    if(error) return { error };
+    await signOut();
+    return {};
+  },[session, hasActiveOrders, signOut]);
+  const deleteAccount = useCallback(async ()=>{
+    if(!session) return { error: new Error('Not logged in') };
+    try{
+      const res = await fetch(SUPABASE_URL+'/functions/v1/delete-my-account', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':SUPABASE_ANON_KEY},
+        body: JSON.stringify({ confirm:'DELETE' }),
+      });
+      let j = {}; try{ j = await res.json(); }catch(e){}
+      if(!res.ok) return { error: new Error(j.error || 'Could not delete your account') };
+      await detachPushFromThisDevice();
+      await sb.auth.signOut({ scope:'local' });
+      try{ ['meraki_guest_cart','meraki_guest_wishlist','meraki_address','meraki_interest_v1'].forEach(k=> localStorage.removeItem(k)); }catch(e){}
+      setCustomerProfile(null);
+      return {};
+    }catch(e){ return { error: e }; }
+  },[session]);
 
   const updateProfile = useCallback(async (fields)=>{
     if(!session) return { error: new Error('Not logged in') };
@@ -851,6 +927,7 @@ function AppProvider({children}){
   // perfectly atomic against another customer buying the last unit at the exact same moment; the
   // real backstop is the fresh stock re-check placeOrder does right before creating the order.
   const addToCart = useCallback((id, qty=1)=>{
+    if(!session){ openAuthSheet('cart', {type:'cart', id, qty}); return; }
     const product = productMap[id];
     const stock = product ? product.stock : 20;
     if(stock<=0){ showToast("That's out of stock right now", '⚠️'); return; }
@@ -871,7 +948,7 @@ function AppProvider({children}){
         { onConflict: 'customer_id,product_id' }
       ).then(({error})=>{ if(error) console.error('Cart sync failed', error); });
     }
-  },[session, showToast, productMap]);
+  },[session, showToast, productMap, openAuthSheet]);
 
   const setCartQty = useCallback((id, qty)=>{
     const product = productMap[id];
@@ -904,6 +981,7 @@ function AppProvider({children}){
   },[session, showToast]);
 
   const toggleWishlist = useCallback((id)=>{
+    if(!session){ openAuthSheet('wishlist', {type:'wish', id}); return; }
     let adding = false;
     setWishlist(prev=>{
       if(prev.includes(id)){ showToast('Removed from wishlist','💔'); adding=false; return prev.filter(x=>x!==id); }
@@ -919,7 +997,7 @@ function AppProvider({children}){
       sb.from('customer_wishlist').delete().eq('customer_id', session.user.id).eq('product_id', id)
         .then(({error})=>{ if(error) console.error('Wishlist sync failed', error); });
     }
-  },[session, showToast]);
+  },[session, showToast, openAuthSheet]);
 
   const moveWishlistToCart = useCallback((id)=>{
     addToCart(id,1);
@@ -929,6 +1007,19 @@ function AppProvider({children}){
         .then(({error})=>{ if(error) console.error('Wishlist sync failed', error); });
     }
   },[addToCart, session]);
+
+  // Whatever the shopper tried to add before signing in happens automatically once they are in.
+  const actionsRef = useRef({});
+  actionsRef.current = { addToCart, toggleWishlist };
+  useEffect(()=>{
+    if(!session || !pendingActionRef.current) return;
+    const p = pendingActionRef.current; pendingActionRef.current = null;
+    const t = setTimeout(()=>{
+      if(p.type==='cart') actionsRef.current.addToCart(p.id, p.qty||1);
+      else if(p.type==='wish') actionsRef.current.toggleWishlist(p.id);
+    }, 1500);
+    return ()=> clearTimeout(t);
+  },[session]);
 
   const cartLines = useMemo(()=> cart
     .map(c=> ({...c, product: productMap[c.id]}))
@@ -1047,6 +1138,9 @@ function AppProvider({children}){
     upiAppChoice, setUpiAppChoice,
     loggedIn, authLoading, session, customerProfile, profileLoading,
     signUp, signIn, signOut, updateProfile,
+    authSheet, openAuthSheet, closeAuthSheet, openAuthScreen, authScreenOpen, skipAuth, guestSkipped, recovering, setRecovering, setupHidden, setSetupHidden,
+    sendEmailCode, verifyEmailCode, sendPhoneCode, verifyPhoneCode, finishAccountSetup, sendPasswordReset, updatePassword, changeEmail,
+    reactivateAccount, deactivateAccount, deleteAccount, hasActiveOrders,
     darkMode, setDarkMode,
     showToast, toast, productMap, productsLoading,
     products, categories,
@@ -2948,7 +3042,7 @@ function ShareSheetModal({product, onClose}){
 // stored, and checkStockNotifications() (run once per session after products load) surfaces it as
 // a toast the next time the person is actually using the app with that item back in stock.
 function NotifyMeButton({product}){
-  const {session, showToast} = useApp();
+  const {session, showToast, openAuthSheet} = useApp();
   const [subscribed, setSubscribed] = useState(false);
   const [checking, setChecking] = useState(true);
 
@@ -2959,7 +3053,7 @@ function NotifyMeButton({product}){
   },[session, product.id]);
 
   const subscribe = ()=>{
-    if(!session){ navigate('#/account'); showToast('Log in to get notified when this is back'); return; }
+    if(!session){ openAuthSheet('notify'); return; }
     setSubscribed(true);
     sb.from('stock_notify_requests').upsert(
       { product_id: product.id, customer_id: session.user.id },
@@ -4857,7 +4951,7 @@ function EditProfileModal({onClose}){
         <div>
           <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
           <input value={(customerProfile && customerProfile.email) || ''} disabled className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400" />
-          <div className="text-[10px] text-[var(--muted)] mt-1">Email is tied to your account and can't be changed here.</div>
+          <div className="text-[10px] text-[var(--muted)] mt-1">To change your email, go to Account → Email & password.</div>
         </div>
         <button onClick={onSave} disabled={saving} className="btn-primary w-full py-2.5 focus-ring">{saving ? 'Saving…' : 'Save Changes'}</button>
       </div>
@@ -4918,6 +5012,119 @@ function RewardsPage(){
   );
 }
 
+/* ============ Account control: email, password, deactivate, delete ============ */
+function SecurityModal({onClose}){
+  const { session, changeEmail, updatePassword, showToast } = useApp();
+  const currentEmail = (session && session.user && session.user.email) || '';
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState({ email:'', pw:'' });
+  const [emailSent, setEmailSent] = useState(false);
+
+  const saveEmail = async ()=>{
+    const v = email.trim();
+    if(!/^\S+@\S+\.\S+$/.test(v)){ setMsg(m=>({...m, email:'Enter a valid email address.'})); return; }
+    if(v.toLowerCase()===currentEmail.toLowerCase()){ setMsg(m=>({...m, email:'That is already your email.'})); return; }
+    setBusy('email'); setMsg(m=>({...m, email:''}));
+    const { error } = await changeEmail(v);
+    setBusy('');
+    if(error){ setMsg(m=>({...m, email: friendlyAuthError(error)})); return; }
+    setEmailSent(true);
+  };
+  const savePw = async ()=>{
+    if(pw.length<6){ setMsg(m=>({...m, pw:'Password must be at least 6 characters.'})); return; }
+    if(pw!==pw2){ setMsg(m=>({...m, pw:"The two passwords don't match."})); return; }
+    setBusy('pw'); setMsg(m=>({...m, pw:''}));
+    const { error } = await updatePassword(pw);
+    setBusy('');
+    if(error){ setMsg(m=>({...m, pw: friendlyAuthError(error)})); return; }
+    setPw(''); setPw2(''); showToast('Password updated 🔒','✅');
+  };
+
+  return (
+    <Modal onClose={onClose} title="Email & password">
+      <div className="space-y-5">
+        <div>
+          <div className="text-sm font-bold">Change email</div>
+          <div className="text-xs text-[var(--muted)] mt-0.5">Now: <b>{currentEmail}</b></div>
+          {emailSent ? (
+            <div className="mt-2 rounded-xl bg-[var(--green-light)] text-[var(--green)] text-xs font-semibold p-3">We've sent confirmation links to your old and new email. Tap the link in each to finish the change — until then your old email keeps working.</div>
+          ) : (<>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="New email address" className="w-full mt-2 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+            {msg.email && <div className="text-xs text-[var(--danger)] mt-1">{msg.email}</div>}
+            <button onClick={saveEmail} disabled={busy==='email'} className="btn-secondary w-full py-2 text-sm mt-2 focus-ring">{busy==='email' ? 'Sending…' : 'Send confirmation'}</button>
+          </>)}
+        </div>
+        <div>
+          <div className="text-sm font-bold">Change password</div>
+          <input type="password" autoComplete="new-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="New password" className="w-full mt-2 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          <input type="password" autoComplete="new-password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="Repeat new password" className="w-full mt-2 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+          {msg.pw && <div className="text-xs text-[var(--danger)] mt-1">{msg.pw}</div>}
+          <button onClick={savePw} disabled={busy==='pw'} className="btn-primary w-full py-2 text-sm mt-2 focus-ring">{busy==='pw' ? 'Saving…' : 'Update password'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DeactivateModal({onClose}){
+  const { deactivateAccount, hasActiveOrders, showToast } = useApp();
+  const [busy, setBusy] = useState(false);
+  const go = async ()=>{
+    setBusy(true);
+    const { error } = await deactivateAccount();
+    setBusy(false);
+    if(error){ showToast(error.message || 'Could not deactivate','⚠️'); return; }
+    showToast('Account deactivated. Log in any time to come back.','😴');
+  };
+  return (
+    <Modal onClose={onClose} title="Deactivate account?">
+      <div className="space-y-3 text-sm">
+        <p className="text-[var(--muted)]">Taking a break? Your orders, addresses and reward money stay safe. You'll be logged out and won't get notifications. Log in again whenever you like and tap <b>Reactivate</b>.</p>
+        {hasActiveOrders && <div className="rounded-xl bg-amber-50 text-amber-800 text-xs font-semibold p-3">You have an order that is still on the way. You can deactivate once it's delivered.</div>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn-secondary flex-1 py-2.5 text-sm focus-ring">Keep active</button>
+          <button onClick={go} disabled={busy || hasActiveOrders} className="btn-primary flex-1 py-2.5 text-sm disabled:opacity-50 focus-ring">{busy ? 'Please wait…' : 'Deactivate'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteAccountModal({onClose}){
+  const { deleteAccount, hasActiveOrders, showToast, rewardBalance } = useApp();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const go = async ()=>{
+    setBusy(true); setErr('');
+    const { error } = await deleteAccount();
+    setBusy(false);
+    if(error){ setErr(error.message || 'Could not delete your account'); return; }
+    showToast('Your account has been deleted','👋');
+  };
+  return (
+    <Modal onClose={onClose} title="Delete account permanently?">
+      <div className="space-y-3 text-sm">
+        <p className="text-[var(--muted)]">This removes your login, saved addresses, cart, wishlist and reward money{rewardBalance>0?(' ('+inr(rewardBalance)+')'):''}. <b>It can't be undone.</b> Records of past orders stay with the shop for its accounts, but are no longer linked to you.</p>
+        <p className="text-[var(--muted)]">Only want a break? Use <b>Deactivate</b> instead.</p>
+        {hasActiveOrders && <div className="rounded-xl bg-amber-50 text-amber-800 text-xs font-semibold p-3">You have an order still on the way. You can delete your account once it's delivered.</div>}
+        <div>
+          <label className="text-xs font-semibold text-[var(--muted)]">Type DELETE to confirm</label>
+          <input value={text} onChange={e=>setText(e.target.value)} placeholder="DELETE" className="w-full mt-1 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring" />
+        </div>
+        {err && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{err}</div>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn-secondary flex-1 py-2.5 text-sm focus-ring">Cancel</button>
+          <button onClick={go} disabled={busy || text!=='DELETE' || hasActiveOrders} className="flex-1 py-2.5 text-sm font-bold rounded-lg bg-[var(--danger)] text-white disabled:opacity-40 focus-ring">{busy ? 'Deleting…' : 'Delete forever'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function AccountPage(){
   const {address, orders, wishlist, customerProfile, signOut, showToast, rewardBalance} = useApp();
   const [editingProfile, setEditingProfile] = useState(false);
@@ -4926,6 +5133,9 @@ function AccountPage(){
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [form, setForm] = useState(address);
   const sections = [
     {IconC:Icon.Package, label:'My Orders', sub: orders.length+' orders', href:'#/orders'},
@@ -4934,6 +5144,7 @@ function AccountPage(){
     {IconC:Icon.Chat, label:'Help & Support', sub:'FAQs, contact us', action:()=>setHelpOpen(true)},
     {IconC:Icon.Store, label:'Store Information', sub:'Timing, location', action:()=>setStoreInfoOpen(true)},
     {IconC:Icon.Settings, label:'Settings', sub:'App preferences', action:()=>setSettingsOpen(true)},
+    {IconC:Icon.User, label:'Email & password', sub:'Change your email or password', action:()=>setSecurityOpen(true)},
   ];
 
   const confirmLogout = async ()=>{
@@ -4982,9 +5193,23 @@ function AccountPage(){
           <div className="flex-1"><div className="text-sm font-semibold text-[var(--danger)]">Log Out</div><div className="text-xs text-[var(--muted)]">Sign out of your account</div></div>
           <span className="text-[var(--muted)]">›</span>
         </button>
+        <div className="mt-4 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)] px-1">Account control</div>
+        <button onClick={()=>setDeactivateOpen(true)} className="card p-3.5 flex items-center gap-3 text-left focus-ring">
+          <span className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center flex-shrink-0 text-lg">😴</span>
+          <div className="flex-1"><div className="text-sm font-semibold">Deactivate account</div><div className="text-xs text-[var(--muted)]">Take a break — come back any time</div></div>
+          <span className="text-[var(--muted)]">›</span>
+        </button>
+        <button onClick={()=>setDeleteOpen(true)} className="card p-3.5 flex items-center gap-3 text-left focus-ring border-red-100">
+          <span className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0 text-lg">🗑️</span>
+          <div className="flex-1"><div className="text-sm font-semibold text-[var(--danger)]">Delete account</div><div className="text-xs text-[var(--muted)]">Permanently remove your account and data</div></div>
+          <span className="text-[var(--muted)]">›</span>
+        </button>
       </div>
       <div className="text-center text-xs text-[var(--muted)] mt-8">Meraki Stationery &amp; Toys · App version 1.0.0 (demo)</div>
 
+      {securityOpen && <SecurityModal onClose={()=>setSecurityOpen(false)} />}
+      {deactivateOpen && <DeactivateModal onClose={()=>setDeactivateOpen(false)} />}
+      {deleteOpen && <DeleteAccountModal onClose={()=>setDeleteOpen(false)} />}
       {editingProfile && <EditProfileModal onClose={()=>setEditingProfile(false)} />}
       {loggingOut && <LogoutConfirmModal onClose={()=>setLoggingOut(false)} onConfirm={confirmLogout} />}
       {editing && (
@@ -5527,7 +5752,7 @@ function AdminCustomers(){
               <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-full bg-[var(--purple-light)] text-[var(--purple)] font-bold flex items-center justify-center flex-shrink-0">{((c.name||c.email||'?')[0]||'?').toUpperCase()}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold truncate">{c.name || 'No name yet'} {c.is_delivery && <span className="text-[10px] font-semibold text-[var(--purple)]">· delivery partner</span>}</div>
+                  <div className="text-sm font-bold truncate">{c.name || 'No name yet'} {c.is_delivery && <span className="text-[10px] font-semibold text-[var(--purple)]">· delivery partner</span>}{c.deactivated && <span className="text-[10px] font-semibold text-amber-700"> · deactivated</span>}</div>
                   <div className="text-xs text-[var(--muted)] truncate">{c.email}{c.phone ? ' · '+c.phone : ''}</div>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -6134,6 +6359,11 @@ function PageRouter({route}){
   const parts = route.parts;
   const top = parts[0] || 'home';
   let page;
+  const { loggedIn } = useApp();
+  if(!loggedIn){
+    const gated = { checkout:'checkout', 'order-confirmation':'your order', orders:'your orders', account:'your account', rewards:'your rewards' };
+    if(gated[top]) return <GuestGate what={gated[top]} />;
+  }
   switch(top){
     case 'home': page = <HomePage />; break;
     case 'category': page = <CategoryPage route={route} />; break;
@@ -6176,9 +6406,218 @@ function AuthInput({icon, ...props}){
   );
 }
 
+/* ============ Guest sign-in sheet, account finishing, password recovery, deactivated screen ============ */
+function friendlyAuthError(err){
+  const m = String((err && err.message) || err || '');
+  if(/rate limit|too many|seconds/i.test(m)) return 'Too many tries — please wait a minute and try again.';
+  if(/invalid.*(token|otp|code)|expired/i.test(m)) return 'That code is wrong or has expired. Check it and try again, or ask for a new one.';
+  if(/phone.*provider|sms/i.test(m)) return "Mobile verification isn't switched on yet. Please use your email.";
+  if(/signups? not allowed/i.test(m)) return 'New sign-ups are switched off right now. Please contact the shop.';
+  return m || 'Something went wrong. Please try again.';
+}
+
+function SheetShell({onClose, children, label}){
+  const [shown, setShown] = useState(false);
+  useEffect(()=>{ const r = requestAnimationFrame(()=> requestAnimationFrame(()=> setShown(true))); return ()=> cancelAnimationFrame(r); },[]);
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 z-[90] flex items-end md:items-center justify-center" role="dialog" aria-label={label}>
+      <div className={"absolute inset-0 bg-black/45 transition-opacity duration-300 "+(shown?'opacity-100':'opacity-0')} onClick={onClose}></div>
+      <div className={"relative bg-white w-full md:w-[420px] md:rounded-2xl rounded-t-3xl px-5 pt-3 pb-6 max-h-[92vh] overflow-y-auto transition-all duration-300 ease-[cubic-bezier(.22,.9,.32,1)] "+(shown?'translate-y-0 opacity-100':'translate-y-full opacity-0')} style={{paddingBottom:'max(1.5rem, env(safe-area-inset-bottom))'}}>
+        <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-3 md:hidden"></div>
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function AuthSheet(){
+  const { authSheet, closeAuthSheet, openAuthScreen, sendEmailCode, verifyEmailCode, sendPhoneCode, verifyPhoneCode, loggedIn, showToast } = useApp();
+  const [via, setVia] = useState('email');
+  const [step, setStep] = useState('start');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [wait, setWait] = useState(0);
+
+  useEffect(()=>{ if(authSheet.open){ setStep('start'); setCode(''); setErr(''); setBusy(false); } },[authSheet.open]);
+  useEffect(()=>{ if(wait<=0) return; const t = setTimeout(()=> setWait(w=>w-1), 1000); return ()=> clearTimeout(t); },[wait]);
+  if(!authSheet.open || loggedIn) return null;
+
+  const why = {
+    cart: ['🛒','Sign in to add to your cart','Create a free account (it takes a minute) so your cart is saved and you can check out.'],
+    wishlist: ['💜','Sign in to save to your wishlist','Create a free account so your wishlist is always with you, on any phone.'],
+    notify: ['🔔',"Sign in to get notified","We'll tell you the moment this item is back in stock."],
+  }[authSheet.reason] || ['👋','Sign in to continue','Create a free account or log in.'];
+
+  const target = via==='email' ? email.trim() : phone;
+  const valid = via==='email' ? /^\S+@\S+\.\S+$/.test(email.trim()) : /^\d{10}$/.test(phone);
+
+  const send = async ()=>{
+    if(!valid){ setErr(via==='email' ? 'Enter a valid email address.' : 'Enter a valid 10-digit mobile number.'); return; }
+    setBusy(true); setErr('');
+    const { error } = await (via==='email' ? sendEmailCode(target) : sendPhoneCode(target));
+    setBusy(false);
+    if(error){ setErr(friendlyAuthError(error)); return; }
+    setStep('code'); setWait(45); setCode('');
+  };
+  const verify = async ()=>{
+    if(code.trim().length<4){ setErr('Enter the code from your '+(via==='email'?'email':'SMS')+'.'); return; }
+    setBusy(true); setErr('');
+    const { error } = await (via==='email' ? verifyEmailCode(target, code.trim()) : verifyPhoneCode(target, code.trim()));
+    setBusy(false);
+    if(error){ setErr(friendlyAuthError(error)); return; }
+    showToast('Verified ✅');
+  };
+
+  return (
+    <SheetShell onClose={closeAuthSheet} label="Sign in">
+      <div className="flex items-start gap-3">
+        <span className="w-11 h-11 rounded-2xl bg-[var(--purple-light)] flex items-center justify-center text-xl flex-shrink-0">{why[0]}</span>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-display font-bold text-lg leading-tight">{step==='start' ? why[1] : 'Enter the code'}</h3>
+          <p className="text-xs text-[var(--muted)] mt-1">{step==='start' ? why[2] : (via==='email' ? <>We sent a code to <b>{target}</b>. If the email has a link instead, tap it.</> : <>We sent an SMS to <b>+91 {target}</b>.</>)}</p>
+        </div>
+        <button onClick={closeAuthSheet} aria-label="Close" className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center focus-ring"><Icon.Close /></button>
+      </div>
+
+      {step==='start' ? (
+        <div className="mt-4 space-y-3">
+          {PHONE_AUTH_ENABLED && (
+            <div className="flex gap-1 p-1 rounded-xl bg-gray-100 text-sm font-semibold">
+              {[['email','Email'],['phone','Mobile']].map(([k,l])=> <button key={k} onClick={()=>{ setVia(k); setErr(''); }} className={"flex-1 py-1.5 rounded-lg focus-ring "+(via===k?'bg-white shadow text-[var(--purple)]':'text-[var(--muted)]')}>{l}</button>)}
+            </div>
+          )}
+          {via==='email'
+            ? <AuthInput icon="✉️" type="email" autoComplete="email" inputMode="email" placeholder="Your email address" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') send(); }} />
+            : <AuthInput icon="📱" type="tel" autoComplete="tel-national" inputMode="numeric" placeholder="10-digit mobile number" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,'').slice(0,10))} onKeyDown={e=>{ if(e.key==='Enter') send(); }} />}
+          {err && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{err}</div>}
+          <button onClick={send} disabled={busy} className="btn-primary w-full py-3 text-sm focus-ring">{busy ? 'Sending…' : 'Send me a code'}</button>
+          <div className="text-center text-xs text-[var(--muted)]">We'll verify it's you, then you pick a password. No spam, ever.</div>
+          <button onClick={openAuthScreen} className="block mx-auto text-sm font-bold text-[var(--purple)] focus-ring">Already have a password? Log in</button>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,8))} onKeyDown={e=>{ if(e.key==='Enter') verify(); }} inputMode="numeric" autoComplete="one-time-code" placeholder="••••••" autoFocus
+            className="w-full text-center tracking-[0.5em] text-2xl font-bold border border-[var(--line)] rounded-xl py-3 focus-ring bg-[#FBFAFE]" />
+          {err && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{err}</div>}
+          <button onClick={verify} disabled={busy} className="btn-primary w-full py-3 text-sm focus-ring">{busy ? 'Checking…' : 'Verify & continue'}</button>
+          <div className="flex items-center justify-between text-xs">
+            <button onClick={()=>{ setStep('start'); setErr(''); }} className="font-semibold text-[var(--muted)] focus-ring">← Change {via==='email'?'email':'number'}</button>
+            <button onClick={send} disabled={wait>0||busy} className="font-bold text-[var(--purple)] disabled:text-gray-400 focus-ring">{wait>0 ? 'Resend in '+wait+'s' : 'Resend code'}</button>
+          </div>
+        </div>
+      )}
+    </SheetShell>
+  );
+}
+
+// Shown once, right after someone verifies with a code/link: pick a name and a password so they can log in normally later.
+function FinishSetupSheet(){
+  const { session, finishAccountSetup, setupHidden, setSetupHidden, showToast } = useApp();
+  const meta = (session && session.user && session.user.user_metadata) || {};
+  const needs = !!session && meta.otp_signup && !meta.setup_done && !setupHidden;
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState(meta.phone || '');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  if(!needs) return null;
+  const save = async ()=>{
+    if(!name.trim()){ setErr('Please tell us your name.'); return; }
+    if(phone && !/^\d{10}$/.test(phone)){ setErr('Enter a valid 10-digit mobile number, or leave it blank.'); return; }
+    if(pw.length<6){ setErr('Choose a password of at least 6 characters.'); return; }
+    setBusy(true); setErr('');
+    const { error } = await finishAccountSetup({ name:name.trim(), phone, password:pw });
+    setBusy(false);
+    if(error){ setErr(friendlyAuthError(error)); return; }
+    showToast('You are all set! 🎉','✨');
+  };
+  return (
+    <SheetShell onClose={()=>setSetupHidden(true)} label="Finish your account">
+      <div className="flex items-start gap-3">
+        <span className="w-11 h-11 rounded-2xl bg-[var(--green-light)] flex items-center justify-center text-xl flex-shrink-0">🎉</span>
+        <div className="flex-1"><h3 className="font-display font-bold text-lg leading-tight">Verified! One last step</h3><p className="text-xs text-[var(--muted)] mt-1">Add your name and choose a password for next time.</p></div>
+      </div>
+      <div className="mt-4 space-y-3">
+        <AuthInput icon="👤" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} />
+        <AuthInput icon="📞" placeholder="Mobile number (optional)" type="tel" inputMode="numeric" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,'').slice(0,10))} />
+        <AuthInput icon="🔒" placeholder="Choose a password (6+ characters)" type="password" autoComplete="new-password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') save(); }} />
+        {err && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{err}</div>}
+        <button onClick={save} disabled={busy} className="btn-primary w-full py-3 text-sm focus-ring">{busy ? 'Saving…' : 'Finish & start shopping'}</button>
+        <button onClick={()=>setSetupHidden(true)} className="block mx-auto text-xs font-semibold text-[var(--muted)] focus-ring">Do this later</button>
+      </div>
+    </SheetShell>
+  );
+}
+
+function ResetPasswordScreen(){
+  const { updatePassword, setRecovering, showToast } = useApp();
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const save = async (e)=>{
+    e.preventDefault(); setErr('');
+    if(pw.length<6){ setErr('Password must be at least 6 characters.'); return; }
+    if(pw!==pw2){ setErr("The two passwords don't match."); return; }
+    setBusy(true);
+    const { error } = await updatePassword(pw);
+    setBusy(false);
+    if(error){ setErr(friendlyAuthError(error)); return; }
+    showToast('Password updated 🔒','✅'); setRecovering(false);
+  };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 fade-in relative">
+      <AuthShellBackground />
+      <form onSubmit={save} className="card w-full max-w-sm p-7 shadow-xl space-y-3">
+        <div className="text-center"><div className="text-4xl">🔑</div><h1 className="font-display font-bold text-xl mt-2">Set a new password</h1><p className="text-sm text-[var(--muted)] mt-1">Choose something you'll remember.</p></div>
+        <AuthInput icon="🔒" type="password" autoComplete="new-password" placeholder="New password" value={pw} onChange={e=>setPw(e.target.value)} />
+        <AuthInput icon="🔒" type="password" autoComplete="new-password" placeholder="Repeat new password" value={pw2} onChange={e=>setPw2(e.target.value)} />
+        {err && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{err}</div>}
+        <button type="submit" disabled={busy} className="btn-primary w-full py-3 text-sm focus-ring">{busy ? 'Saving…' : 'Save password'}</button>
+      </form>
+    </div>
+  );
+}
+
+function DeactivatedScreen(){
+  const { reactivateAccount, signOut, showToast } = useApp();
+  const [busy, setBusy] = useState(false);
+  const back = async ()=>{ setBusy(true); const { error } = await reactivateAccount(); setBusy(false); if(error) showToast('Could not reactivate — try again','⚠️'); else showToast('Welcome back! 👋','✨'); };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 text-center fade-in relative">
+      <AuthShellBackground />
+      <div className="card w-full max-w-sm p-8 shadow-xl">
+        <div className="text-5xl">😴</div>
+        <h1 className="font-display font-bold text-xl mt-3">Your account is deactivated</h1>
+        <p className="text-sm text-[var(--muted)] mt-2">Your details are safe. Reactivate any time to carry on shopping — nothing is lost.</p>
+        <button onClick={back} disabled={busy} className="btn-primary w-full py-3 text-sm mt-6 focus-ring">{busy ? 'Please wait…' : 'Reactivate my account'}</button>
+        <button onClick={signOut} className="text-sm font-semibold text-[var(--muted)] mt-4 focus-ring">Log out</button>
+      </div>
+    </div>
+  );
+}
+
+// What a not-signed-in visitor sees on pages that need an account (orders, checkout, account, rewards).
+function GuestGate({what}){
+  const { openAuthScreen } = useApp();
+  return (
+    <div className="px-6 py-16 max-w-sm mx-auto text-center fade-in">
+      <div className="text-5xl">🔐</div>
+      <h2 className="font-display font-bold text-xl mt-3">Log in to see {what}</h2>
+      <p className="text-sm text-[var(--muted)] mt-2">It only takes a minute to create a free account.</p>
+      <button onClick={openAuthScreen} className="btn-primary w-full py-3 text-sm mt-6 focus-ring">Log in / Create account</button>
+      <a href="#/home" className="block text-sm font-semibold text-[var(--muted)] mt-4 focus-ring">Keep browsing</a>
+    </div>
+  );
+}
+
 function LoggedOutScreen(){
-  const { signUp, signIn, showToast } = useApp();
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'check-email'
+  const { signUp, signIn, showToast, skipAuth, sendPasswordReset } = useApp();
+  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'check-email' | 'forgot' | 'reset-sent'
   const [form, setForm] = useState({ email:'', password:'', fullName:'', phone:'', username:'' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -6188,6 +6627,14 @@ function LoggedOutScreen(){
   const submit = async (e)=>{
     e.preventDefault();
     setError('');
+    if(mode==='forgot'){
+      if(!/^\S+@\S+\.\S+$/.test(form.email.trim())){ setError('Enter the email you signed up with.'); return; }
+      setSubmitting(true);
+      const { error: err } = await sendPasswordReset(form.email.trim());
+      setSubmitting(false);
+      if(err){ setError(/rate limit|seconds/i.test(err.message||'') ? 'Please wait a minute before asking again.' : (err.message || 'Could not send the email.')); return; }
+      setMode('reset-sent'); return;
+    }
     if(!form.email.trim() || !form.password){ setError('Email and password are required.'); return; }
     if(mode==='signup' && form.password.length<6){ setError('Password must be at least 6 characters.'); return; }
     setSubmitting(true);
@@ -6224,6 +6671,20 @@ function LoggedOutScreen(){
     );
   }
 
+  if(mode==='reset-sent'){
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center fade-in relative">
+        <AuthShellBackground />
+        <div className="card w-full max-w-sm p-8 shadow-xl">
+          <div className="text-6xl mb-2">📬</div>
+          <h1 className="font-display font-bold text-xl mt-2">Check your email</h1>
+          <p className="text-sm text-[var(--muted)] mt-2">If <b>{form.email}</b> has an account, we've sent a link to set a new password. Open it on this phone.</p>
+          <button onClick={()=>setMode('signin')} className="btn-primary w-full py-3 text-sm mt-6 focus-ring">Back to Log In</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 text-center fade-in relative">
       <AuthShellBackground />
@@ -6232,8 +6693,13 @@ function LoggedOutScreen(){
       </div>
 
       <div className="card w-full max-w-sm p-7 shadow-xl text-left rise-in">
-        <h1 className="font-display font-bold text-xl text-center">{mode==='signin' ? 'Welcome back! 👋' : 'Create your account ✨'}</h1>
-        <p className="text-sm text-[var(--muted)] mt-1 text-center">{mode==='signin' ? 'Log in to shop, track orders and manage your wishlist.' : 'Sign up to start shopping at Meraki.'}</p>
+        {mode!=='forgot' && (
+          <div className="flex gap-1 p-1 rounded-xl bg-gray-100 text-sm font-semibold mb-4">
+            {[['signin','Log in'],['signup','Create account']].map(([k,l])=> <button key={k} type="button" onClick={()=>{ setMode(k); setError(''); }} className={"flex-1 py-2 rounded-lg focus-ring "+(mode===k?'bg-white shadow text-[var(--purple)]':'text-[var(--muted)]')}>{l}</button>)}
+          </div>
+        )}
+        <h1 className="font-display font-bold text-xl text-center">{mode==='signin' ? 'Welcome back! 👋' : mode==='forgot' ? 'Forgot your password? 🔑' : 'Create your account ✨'}</h1>
+        <p className="text-sm text-[var(--muted)] mt-1 text-center">{mode==='signin' ? 'Log in to shop, track orders and manage your wishlist.' : mode==='forgot' ? "Enter your email and we'll send you a link to set a new one." : 'Sign up to start shopping at Meraki.'}</p>
 
         <form onSubmit={submit} className="mt-6 space-y-3">
           {mode==='signup' && (
@@ -6258,20 +6724,22 @@ function LoggedOutScreen(){
             <label className="text-xs font-semibold text-[var(--muted)]">Email</label>
             <div className="mt-1"><AuthInput icon="✉️" type="email" value={form.email} onChange={e=>update('email',e.target.value)} /></div>
           </div>
+          {mode!=='forgot' && (
           <div>
             <label className="text-xs font-semibold text-[var(--muted)]">Password</label>
-            <div className="mt-1"><AuthInput icon="🔒" type="password" value={form.password} onChange={e=>update('password',e.target.value)} /></div>
+            <div className="mt-1"><AuthInput icon="🔒" type="password" autoComplete={mode==='signin'?'current-password':'new-password'} value={form.password} onChange={e=>update('password',e.target.value)} /></div>
+            {mode==='signin' && <button type="button" onClick={()=>{ setMode('forgot'); setError(''); }} className="text-xs font-bold text-[var(--purple)] mt-2 focus-ring">Forgot password?</button>}
           </div>
+          )}
           {error && <div className="text-xs text-[var(--danger)] font-semibold bg-red-50 rounded-lg px-3 py-2">{error}</div>}
           <button type="submit" disabled={submitting} className="btn-primary w-full py-3 text-sm focus-ring mt-1">
-            {submitting ? 'Please wait…' : (mode==='signin' ? 'Log In' : 'Create Account')}
+            {submitting ? 'Please wait…' : (mode==='signin' ? 'Log In' : mode==='forgot' ? 'Send reset link' : 'Create Account')}
           </button>
         </form>
 
-        <button onClick={()=>{ setMode(mode==='signin'?'signup':'signin'); setError(''); }} className="text-sm font-bold text-[var(--purple)] mt-5 focus-ring block mx-auto">
-          {mode==='signin' ? "New here? Create an account" : "Already have an account? Log in"}
-        </button>
+        {mode==='forgot' && <button onClick={()=>{ setMode('signin'); setError(''); }} className="text-sm font-bold text-[var(--purple)] mt-5 focus-ring block mx-auto">← Back to Log In</button>}
       </div>
+      <button onClick={skipAuth} className="mt-5 text-sm font-bold text-[var(--purple)] focus-ring px-6 py-2.5 rounded-full border border-[var(--purple)]/30 bg-white/70">Skip for now — just browse</button>
 
       <div className="text-[11px] text-[var(--muted)] mt-6">✨ Everything they need, delivered with care.</div>
     </div>
@@ -7054,7 +7522,8 @@ function NotificationsCard(){
 function PushPromptBanner(){
   const p = usePushNotifications();
   const [dismissed, setDismissed] = useState(()=>{ try{ return localStorage.getItem(PUSH_DISMISS_KEY)==='1'; }catch(e){ return false; } });
-  if(dismissed || p.state!=='off') return null;
+  const { loggedIn } = useApp();
+  if(!loggedIn || dismissed || p.state!=='off') return null;
   const dismiss = ()=>{ setDismissed(true); try{ localStorage.setItem(PUSH_DISMISS_KEY,'1'); }catch(e){} };
   return (
     <div className="px-4 md:container-max md:mx-auto mt-4">
@@ -7274,7 +7743,7 @@ function AdminNotify(){
 }
 
 function AppShell({route, hash}){
-  const {loggedIn, authLoading, storeSettings} = useApp();
+  const {loggedIn, authLoading, storeSettings, recovering, authScreenOpen, guestSkipped, customerProfile} = useApp();
   useEffect(()=>{
     window.scrollTo({top:0, left:0, behavior:'auto'});
   },[hash]);
@@ -7288,7 +7757,9 @@ function AppShell({route, hash}){
       </div>
     );
   }
-  if(!loggedIn) return <LoggedOutScreen />;
+  if(recovering) return <ResetPasswordScreen />;
+  if(!loggedIn && (authScreenOpen || !guestSkipped)) return <LoggedOutScreen />;
+  if(loggedIn && customerProfile && customerProfile.deactivated_at) return <DeactivatedScreen />;
   const transitionKey = route.parts[0]==='category' ? 'category' : hash;
   return (
     <div className="min-h-screen flex flex-col">
@@ -7303,6 +7774,8 @@ function AppShell({route, hash}){
       {!isCheckoutOrConfirm && <div className="mobile-only h-14"></div>}
       {!isCheckoutOrConfirm && <BottomNav route={route} />}
       <PushSync />
+      <AuthSheet />
+      <FinishSetupSheet />
       {storeSettings.chatbotEnabled!==false && !isCheckoutOrConfirm && <MeraAssistant />}
       <Toast />
     </div>
