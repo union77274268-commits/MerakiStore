@@ -16,6 +16,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <title>Meraki — Stationery & Toys</title>
+<meta name="description" content="Stationery, toys and art supplies delivered fast.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Meraki Stationery & Toys">
+<meta property="og:title" content="Meraki — Stationery & Toys"><meta property="og:description" content="Stationery, toys and art supplies delivered fast.">
+<meta property="og:image" content="https://meraki-store-xi.vercel.app/og-image.png"><meta name="twitter:card" content="summary_large_image">
 <script>
   // Some mobile browsers' "Desktop site" mode forces a wide layout viewport, which makes our
   // `min-width:900px` breakpoint fire even on an actual phone — that's what shows the desktop
@@ -489,6 +493,10 @@ function mapDbOrder(row, productMap){
     deliveryCharge: Number(row.delivery_charge),
     packagingCharge: Number(row.packaging_charge),
     total: Number(row.total),
+    rewardsUsed: Number(row.discount||0),
+    couponCode: row.coupon_code || null,
+    couponDiscount: Number(row.coupon_discount||0),
+    slot: row.delivery_slot || null,
     deliveryType: row.delivery_type,
     deliveryOtp: row.delivery_otp || null,
     paymentMethod: row.payment_method,
@@ -620,6 +628,9 @@ function AppProvider({children}){
     area:'', landmark:'', pincode:'', city:'Jaipur', instructions:''
   });
   const [deliveryType, setDeliveryType] = useLocalState('meraki_delivery_type','home');
+  const [shopRules, setShopRules] = useState({delivery_charge:DELIVERY_CHARGE, packaging_charge:PACKAGING_CHARGE, free_delivery_above:FREE_DELIVERY_THRESHOLD, min_order:0, serviceable_pins:[], slots_enabled:false, slots:[]});
+  const [coupon, setCoupon] = useState(null); // {code, discount, message}
+  const [slot, setSlot] = useState(null);     // {date:'YYYY-MM-DD', label}
   const [paymentMethod, setPaymentMethod] = useLocalState('meraki_payment_method','cod');
   const [upiAppChoice, setUpiAppChoice] = useLocalState('meraki_upi_app_choice', null);
   const [darkMode, setDarkMode] = useLocalState('meraki_dark_mode', false);
@@ -862,6 +873,14 @@ function AppProvider({children}){
     return ()=>{ cancelled = true; };
   },[session, products.length]);
 
+  const fetchShopRules = useCallback(()=>{
+    sb.rpc('get_shop_rules').then(({data, error})=>{
+      if(error || !data){ if(error) console.error('Failed to load shop rules', error); return; }
+      setShopRules(prev=> ({...prev, ...data}));
+    });
+  },[]);
+  useEffect(()=>{ fetchShopRules(); },[fetchShopRules]);
+
   const fetchRewardBalance = useCallback(()=>{
     if(!session){ setRewardBalance(0); return; }
     sb.from('loyalty_transactions').select('amount').eq('customer_id', session.user.id)
@@ -1070,98 +1089,97 @@ function AppProvider({children}){
   const subtotal = useMemo(()=> cartLines.reduce((s,c)=> s + c.product.price*c.qty, 0), [cartLines]);
   const mrpTotal = useMemo(()=> cartLines.reduce((s,c)=> s + c.product.mrp*c.qty, 0), [cartLines]);
   const savings = mrpTotal - subtotal;
-  const deliveryCharge = subtotal===0 ? 0 : (subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_CHARGE);
-  const packagingCharge = subtotal===0 ? 0 : PACKAGING_CHARGE;
-  const preRewardTotal = subtotal + deliveryCharge + packagingCharge;
+  const freeAbove = Number(shopRules.free_delivery_above);
+  const deliveryCharge = subtotal===0 || deliveryType==='pickup' ? 0 : (subtotal >= freeAbove ? 0 : Number(shopRules.delivery_charge));
+  const packagingCharge = subtotal===0 ? 0 : Number(shopRules.packaging_charge);
+  const couponDiscount = subtotal===0 || !coupon ? 0 : Math.min(coupon.discount, subtotal);
+  const minOrder = Number(shopRules.min_order||0);
+  const belowMinOrder = subtotal>0 && subtotal < minOrder;
+  const preRewardTotal = subtotal + deliveryCharge + packagingCharge - couponDiscount;
   // Reward redemption is clamped to what's actually available and can never make the order free —
   // the database independently re-checks the balance when the redemption transaction is written,
   // so this clamp is about a sane UI, not the actual security boundary.
   const effectiveRedeemAmount = subtotal===0 ? 0 : Math.min(redeemAmount, rewardBalance, preRewardTotal);
   const total = preRewardTotal - effectiveRedeemAmount;
-  const amountToFreeDelivery = Math.max(0, FREE_DELIVERY_THRESHOLD - subtotal);
+  const amountToFreeDelivery = Math.max(0, freeAbove - subtotal);
   const cartCount = cart.reduce((s,c)=> s+c.qty, 0);
+
+  const applyCoupon = useCallback(async (code)=>{
+    const c = String(code||'').trim();
+    if(!c) return { ok:false, message:'Enter a code' };
+    const { data, error } = await sb.rpc('validate_coupon', { p_code:c, p_subtotal:subtotal });
+    if(error || !data) return { ok:false, message:'Could not check the code — try again' };
+    if(data.ok) setCoupon({ code:data.code, discount:Number(data.discount), message:data.message });
+    return data;
+  },[subtotal]);
+  const removeCoupon = useCallback(()=> setCoupon(null), []);
+  // keep the discount right when the cart changes (or drop the code if it no longer qualifies)
+  useEffect(()=>{
+    if(!coupon) return;
+    if(subtotal===0){ setCoupon(null); return; }
+    let off=false;
+    sb.rpc('validate_coupon', { p_code:coupon.code, p_subtotal:subtotal }).then(({data})=>{
+      if(off || !data) return;
+      if(data.ok){ if(Number(data.discount)!==coupon.discount) setCoupon({code:data.code, discount:Number(data.discount), message:data.message}); }
+      else { setCoupon(null); showToast(data.message || 'Coupon removed','🏷️'); }
+    });
+    return ()=>{ off=true; };
+    // eslint-disable-next-line
+  },[subtotal]);
 
   const placeOrder = useCallback(async ()=>{
     if(!session) return { error: new Error('Not logged in') };
     if(!cartLines.length) return { error: new Error('Your cart is empty') };
 
-    // Final stock check right before the order is created — this is the real backstop against two
-    // customers (or an in-store POS sale) taking the last unit of something at nearly the same
-    // time; the cart-side clamping earlier is only as fresh as the last product sync.
-    const ids = cartLines.map(c=>c.id);
-    const { data: freshRows, error: stockErr } = await sb.from('storefront_products').select('id, stock').in('id', ids);
-    if(stockErr){ showToast('Could not verify stock — please try again','⚠️'); return { error: stockErr }; }
-    const freshStock = {}; (freshRows||[]).forEach(r=>{ freshStock[r.id]=r.stock; });
-    const shortages = cartLines.filter(c=> (freshStock[c.id] ?? 0) < c.qty);
-    if(shortages.length){
-      shortages.forEach(c=>{
-        const avail = freshStock[c.id] || 0;
-        if(avail<=0) removeFromCart(c.id); else setCartQty(c.id, avail);
-      });
-      const names = shortages.map(c=>c.product.name).join(', ');
-      showToast(`Stock just changed for: ${names} — please review your cart`, '⚠️');
-      return { error: new Error('stock_changed') };
-    }
-
     const needsVerification = paymentMethod==='upi' || paymentMethod==='upiApps';
     const paymentLabel = paymentMethod==='upiApps' && upiAppChoice ? upiAppChoice.label : PAYMENT_LABELS[paymentMethod] || paymentMethod;
-    const redeemedNow = effectiveRedeemAmount;
 
-    const { data: orderRow, error: orderErr } = await sb.from('online_orders').insert({
-      customer_id: session.user.id,
-      status: 'Order Confirmed',
-      subtotal, delivery_charge: deliveryCharge, packaging_charge: packagingCharge, discount: redeemedNow, total,
-      payment_status: needsVerification ? 'pending' : 'cod',
-      payment_method: paymentLabel,
-      delivery_type: deliveryType,
-      shipping_address: address,
-      notes: address.instructions || null,
-    }).select().single();
-
-    if(orderErr || !orderRow){
-      showToast('Could not place order — please try again','⚠️');
-      return { error: orderErr };
-    }
-
-    const itemRows = cartLines.map(c=> ({
-      order_id: orderRow.id, product_id: c.id, product_name: c.product.name,
-      quantity: c.qty, unit_price: c.product.price, discount: 0, total: c.product.price*c.qty,
-    }));
-    const { error: itemsErr } = await sb.from('online_order_items').insert(itemRows);
-    if(itemsErr){
-      // Never leave a confirmed-looking order behind with no items in it (that's what silently
-      // happened when the stock trigger broke) — roll the order back and tell the customer.
-      console.error('Failed to insert order items', itemsErr);
-      await sb.from('online_orders').delete().eq('id', orderRow.id);
-      showToast("Couldn't place your order — nothing was charged. Please try again.", '⚠️');
-      return { error: itemsErr };
-    }
-
-    const { error: payErr } = await sb.from('online_payments').insert({
-      order_id: orderRow.id, amount: total, method: paymentLabel,
-      status: needsVerification ? 'pending' : 'pending',
-      transaction_reference: needsVerification ? 'MERAKI'+Date.now() : null,
-      gateway: paymentMethod==='cod' ? 'cod' : 'upi_manual',
-      metadata: upiAppChoice ? { app: upiAppChoice.id } : null,
+    // The server prices the order (products, delivery rules, coupon, rewards, stock) — nothing the
+    // phone calculates is trusted.
+    const { data, error } = await sb.rpc('place_order', {
+      p_items: cartLines.map(c=>({ id:c.id, qty:c.qty })),
+      p_address: address,
+      p_delivery_type: deliveryType,
+      p_payment_label: paymentLabel,
+      p_payment_kind: needsVerification ? 'upi' : 'cod',
+      p_redeem: effectiveRedeemAmount,
+      p_coupon: coupon ? coupon.code : null,
+      p_slot: deliveryType==='home' && shopRules.slots_enabled ? slot : null,
+      p_upi_app: upiAppChoice ? { id: upiAppChoice.id } : null,
     });
-    if(payErr) console.error('Failed to insert payment record', payErr);
-
-    if(redeemedNow > 0){
-      sb.from('loyalty_transactions').insert({
-        customer_id: session.user.id, order_id: orderRow.id, amount: -redeemedNow, reason: 'Redeemed',
-      }).then(({error})=>{ if(error) console.error('Failed to record reward redemption', error); fetchRewardBalance(); });
+    if(error || !data || !data.order){
+      const m = String((error && error.message) || '');
+      if(m.includes('stock_changed')){
+        const ids = cartLines.map(c=>c.id);
+        const { data: freshRows } = await sb.from('storefront_products').select('id, stock').in('id', ids);
+        const fs = {}; (freshRows||[]).forEach(r=>{ fs[r.id]=r.stock; });
+        cartLines.forEach(c=>{ const av = fs[c.id]||0; if(av<=0) removeFromCart(c.id); else if(av<c.qty) setCartQty(c.id, av); });
+        showToast('Stock just changed for something in your cart — please review it', '⚠️');
+        return { error: new Error('stock_changed') };
+      }
+      if(m.includes('not_serviceable')) showToast("Sorry, we don't deliver to that PIN code yet", '📍');
+      else if(m.includes('min_order')) showToast('Your cart is below the minimum order amount', '⚠️');
+      else if(m.includes('slot_passed')) showToast('That delivery window has just passed — please pick another', '⏰');
+      else if(m.includes('slot_invalid')) showToast('Please pick a delivery time slot again', '⏰');
+      else if(m.includes('coupon:')){ setCoupon(null); showToast(m.split('coupon:')[1].trim().slice(0,80) || 'Coupon is no longer valid', '🏷️'); }
+      else showToast('Could not place order — please try again','⚠️');
+      return { error: error || new Error('place_failed') };
     }
 
+    const orderRow = data.order;
+    const itemRows = data.items || [];
     const fullOrder = mapDbOrder({...orderRow, online_order_items: itemRows, online_payments: []}, productMap);
     setOrders(prev=> [fullOrder, ...prev]);
     setCart([]);
     setUpiAppChoice(null);
     setRedeemAmount(0);
-    fetchOrders();
+    setCoupon(null);
+    setSlot(null);
+    fetchOrders(); fetchRewardBalance();
     sb.from('customer_cart_items').delete().eq('customer_id', session.user.id)
       .then(({error})=>{ if(error) console.error('Failed to clear cart after order', error); });
     return { order: fullOrder };
-  },[session, cartLines, subtotal, deliveryCharge, packagingCharge, total, effectiveRedeemAmount, deliveryType, paymentMethod, upiAppChoice, address, productMap, setCart, setCartQty, removeFromCart, setUpiAppChoice, fetchOrders, fetchRewardBalance, showToast]);
+  },[session, cartLines, effectiveRedeemAmount, deliveryType, paymentMethod, upiAppChoice, address, coupon, slot, shopRules, productMap, setCart, setCartQty, removeFromCart, setUpiAppChoice, fetchOrders, fetchRewardBalance, showToast]);
 
   const verifyOrderPayment = useCallback(async (orderId)=>{
     setOrders(prev=> prev.map(o=> o.id===orderId ? {...o, paymentVerified:true} : o));
@@ -1171,12 +1189,12 @@ function AppProvider({children}){
   },[showToast]);
 
   const refreshAll = useCallback(async ()=>{
-    fetchProducts(); fetchCategories(); fetchBannersAndSettings();
+    fetchProducts(); fetchCategories(); fetchBannersAndSettings(); fetchShopRules();
     if(session){ fetchOrders(); fetchRewardBalance(); }
     await new Promise(r=>setTimeout(r,900));
-  },[fetchProducts, fetchCategories, fetchBannersAndSettings, session, fetchOrders, fetchRewardBalance]);
+  },[fetchProducts, fetchCategories, fetchBannersAndSettings, fetchShopRules, session, fetchOrders, fetchRewardBalance]);
   const value = {
-    refreshAll,
+    refreshAll, shopRules, fetchShopRules, coupon, couponDiscount, applyCoupon, removeCoupon, slot, setSlot, minOrder, belowMinOrder,
     cart, cartLines, cartCount, subtotal, mrpTotal, savings, deliveryCharge, packagingCharge, total, amountToFreeDelivery,
     rewardBalance, redeemAmount, setRedeemAmount, effectiveRedeemAmount,
     addToCart, setCartQty, removeFromCart,
@@ -3158,7 +3176,7 @@ function ReviewsModal({product, onClose}){
 
 function ShareSheetModal({product, onClose}){
   const {showToast} = useApp();
-  const url = window.location.href;
+  const url = window.location.origin + '/api/p?id=' + encodeURIComponent(product.id); // link with a rich preview card
   const text = encodeURIComponent('Check out '+product.name+' on Meraki Stationery & Toys!');
   const encodedUrl = encodeURIComponent(url);
   const copy = ()=>{
@@ -3504,7 +3522,7 @@ function ProductMediaEditor({item}){
 
 function ProductPage({route}){
   const id = route.parts[1];
-  const {productMap, products, cart, addToCart, setCartQty, removeFromCart, wishlist, toggleWishlist, address, showToast} = useApp();
+  const {productMap, products, cart, addToCart, setCartQty, removeFromCart, wishlist, toggleWishlist, address, showToast, shopRules} = useApp();
   const product = productMap[id];
   const [qty, setQty] = useState(1);
   const [shareOpen, setShareOpen] = useState(false);
@@ -3694,7 +3712,7 @@ function ProductExtraSections({product}){
   ].filter(r=>r[1]);
   const faqs = [
     {q:'How fast can I get this?', a:'Most Jaipur orders arrive within 2–4 hours. Choose Store Pickup at checkout and it will be ready at our '+storeSettings.area+' store, usually within 2 hours.'},
-    {q:'What are the delivery charges?', a:'Delivery is '+inr(DELIVERY_CHARGE)+', and free on orders of '+inr(FREE_DELIVERY_THRESHOLD)+' or more. There is also a '+inr(PACKAGING_CHARGE)+' packaging charge.'},
+    {q:'What are the delivery charges?', a:'Delivery is '+inr(shopRules.delivery_charge)+', and free on orders of '+inr(shopRules.free_delivery_above)+' or more. There is also a '+inr(shopRules.packaging_charge)+' packaging charge.'},
     {q:'Can I return it?', a:'Unused items in original packaging can be returned within 7 days of delivery. Refunds go back to your original payment method in 3–5 business days.'},
     {q:'Can I pick it up from the shop?', a:'Yes — '+[storeSettings.addressLine, storeSettings.area, storeSettings.city].filter(Boolean).join(', ')+'. Open '+storeSettings.hoursWeekday+' (Sunday '+storeSettings.hoursSunday+').'},
   ];
@@ -3787,7 +3805,8 @@ function ProductMoreRows({product, excludeIds}){
 /* ============================= CART PAGE ============================= */
 
 function FreeDeliveryBar(){
-  const {subtotal, amountToFreeDelivery} = useApp();
+  const {subtotal, amountToFreeDelivery, shopRules} = useApp();
+  const FREE_DELIVERY_THRESHOLD = Number(shopRules.free_delivery_above);
   const pct = clamp((subtotal / FREE_DELIVERY_THRESHOLD) * 100, 0, 100);
   if(subtotal===0) return null;
   return (
@@ -3829,26 +3848,56 @@ function CountUp({value, formatFn}){
 }
 
 function PriceSummary({showCheckoutButton}){
-  const {subtotal, savings, deliveryCharge, packagingCharge, total, cartLines, rewardBalance, redeemAmount, setRedeemAmount, effectiveRedeemAmount} = useApp();
+  const {subtotal, savings, deliveryCharge, packagingCharge, total, cartLines, rewardBalance, redeemAmount, setRedeemAmount, effectiveRedeemAmount, coupon, couponDiscount, applyCoupon, removeCoupon, belowMinOrder, minOrder, loggedIn, openAuthSheet, deliveryType} = useApp();
+  const [code, setCode] = useState('');
+  const [couponMsg, setCouponMsg] = useState('');
+  const [couponBusy, setCouponBusy] = useState(false);
+  const doApply = async ()=>{
+    if(!loggedIn){ openAuthSheet && openAuthSheet(); return; }
+    setCouponBusy(true); setCouponMsg('');
+    const r = await applyCoupon(code);
+    setCouponBusy(false);
+    if(r.ok){ setCode(''); setCouponMsg(''); } else setCouponMsg(r.message || 'That code is not valid');
+  };
   return (
     <div className="card p-4">
       <div className="font-bold text-sm mb-3">Price Details</div>
       <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Subtotal ({cartLines.reduce((s,c)=>s+c.qty,0)} items)</span><span><CountUp value={subtotal} formatFn={inr} /></span></div>
       <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Delivery Charge</span><span className={deliveryCharge===0?'text-[var(--green)] font-semibold':''}>{deliveryCharge===0?'FREE':inr(deliveryCharge)}</span></div>
       <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Packaging Charge</span><span>{inr(packagingCharge)}</span></div>
+      {couponDiscount>0 && <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Coupon ({coupon.code})</span><span className="text-[var(--green)]">-{inr(couponDiscount)}</span></div>}
       {savings>0 && <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Discount</span><span className="text-[var(--green)]">-<CountUp value={savings} formatFn={inr} /></span></div>}
       {effectiveRedeemAmount>0 && <div className="flex justify-between text-sm py-1"><span className="text-[var(--muted)]">Reward Redeemed</span><span className="text-[var(--green)]">-<CountUp value={effectiveRedeemAmount} formatFn={inr} /></span></div>}
       <div className="border-t border-dashed border-[var(--line)] my-2"></div>
       <div className="flex justify-between font-bold text-base py-1"><span>Total Amount</span><span><CountUp value={total} formatFn={inr} /></span></div>
       {savings>0 && <div className="text-xs text-[var(--green)] font-semibold mt-1">You saved {inr(savings)} on this order 🎉</div>}
+      {showCheckoutButton && (
+        coupon ? (
+          <div className="flex items-center gap-2 mt-3 p-2.5 rounded-xl bg-[var(--green-light)]">
+            <span className="text-xs font-semibold text-[var(--green)] flex-1 min-w-0 break-words">🏷️ {coupon.code} applied — you save {inr(couponDiscount)}</span>
+            <button onClick={removeCoupon} className="text-xs font-bold text-[var(--danger)] focus-ring flex-shrink-0">Remove</button>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <div className="flex gap-2">
+              <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase()); setCouponMsg('');}} onKeyDown={e=>{ if(e.key==='Enter') doApply(); }} placeholder="Have a coupon code?" aria-label="Coupon code" maxLength={30} className="flex-1 min-w-0 border border-[var(--line)] bg-transparent rounded-lg px-3 py-2 text-sm focus-ring" />
+              <button onClick={doApply} disabled={couponBusy || !code.trim()} className="btn-secondary px-4 text-sm font-semibold flex-shrink-0 disabled:opacity-50 focus-ring">{couponBusy?'…':'Apply'}</button>
+            </div>
+            {couponMsg && <div className="text-xs text-[var(--danger)] mt-1.5">{couponMsg}</div>}
+          </div>
+        )
+      )}
       {rewardBalance>0 && (
         <label className="flex items-center gap-2.5 mt-3 p-2.5 rounded-xl bg-[var(--purple-light)] cursor-pointer">
           <input type="checkbox" checked={redeemAmount>0} onChange={e=>setRedeemAmount(e.target.checked ? rewardBalance : 0)} className="w-4 h-4 accent-[var(--purple)] flex-shrink-0" />
           <span className="text-xs font-semibold text-[var(--purple)] flex-1">Use {inr(rewardBalance)} reward balance</span>
         </label>
       )}
+      {showCheckoutButton && belowMinOrder && <div className="text-xs font-semibold text-amber-700 bg-[#FFF8E9] rounded-xl p-2.5 mt-3">Minimum order is {inr(minOrder)} — add {inr(minOrder-subtotal)} more to checkout.</div>}
       {showCheckoutButton && (
-        <a href="#/checkout/address" className="btn-primary w-full py-3 text-sm mt-4 text-center block focus-ring">Proceed to Checkout</a>
+        belowMinOrder
+          ? <button disabled className="btn-primary w-full py-3 text-sm mt-4 opacity-50 cursor-not-allowed">Proceed to Checkout</button>
+          : <a href="#/checkout/address" className="btn-primary w-full py-3 text-sm mt-4 text-center block focus-ring">Proceed to Checkout</a>
       )}
       <div className="text-center text-[11px] text-[var(--muted)] mt-2">🔒 Secure Checkout</div>
     </div>
@@ -4070,8 +4119,56 @@ function PinField({lat, lng, onPicked, onClear}){
   );
 }
 
+function istNow(){
+  const parts = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const g = t=> Number(parts.find(x=>x.type===t).value);
+  return { y:g('year'), m:g('month'), d:g('day'), hour:g('hour')+g('minute')/60 };
+}
+function slotDays(){
+  const n = istNow();
+  const base = new Date(Date.UTC(n.y, n.m-1, n.d));
+  const fmt = dt=> dt.toISOString().slice(0,10);
+  const next = new Date(base.getTime()+86400000);
+  return { hour:n.hour, days:[{key:fmt(base), label:'Today'},{key:fmt(next), label:'Tomorrow'}] };
+}
+function SlotPicker(){
+  const {shopRules, slot, setSlot} = useApp();
+  const {hour, days} = slotDays();
+  const options = [];
+  days.forEach((dd,i)=> (shopRules.slots||[]).forEach(sl=>{
+    if(i===0 && hour >= Number(sl.end)) return;
+    options.push({date:dd.key, day:dd.label, label:sl.label});
+  }));
+  useEffect(()=>{
+    if(slot && options.some(o=>o.date===slot.date && o.label===slot.label)) return;
+    setSlot(options[0] ? {date:options[0].date, label:options[0].label} : null);
+    // eslint-disable-next-line
+  },[]);
+  if(!options.length) return <div className="card p-3 mt-4 text-xs text-[var(--muted)]">No delivery windows are left right now.</div>;
+  return (
+    <div className="mt-5">
+      <div className="font-bold text-sm mb-2">Delivery time</div>
+      {days.map(dd=>{
+        const opts = options.filter(o=>o.date===dd.key);
+        if(!opts.length) return null;
+        return (
+          <div key={dd.key} className="mb-2">
+            <div className="text-[11px] font-semibold text-[var(--muted)] mb-1">{dd.label}</div>
+            <div className="flex flex-wrap gap-2">
+              {opts.map(o=>{
+                const on = slot && slot.date===o.date && slot.label===o.label;
+                return <button key={o.date+o.label} type="button" onClick={()=>setSlot({date:o.date,label:o.label})} className={"px-3 py-2 rounded-xl text-xs font-semibold border focus-ring "+(on?'border-[var(--purple)] bg-[var(--purple-light)] text-[var(--purple)]':'border-[var(--line)]')}>{o.label}</button>;
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CheckoutAddressPage(){
-  const {deliveryType, setDeliveryType, address, setAddress, cartLines, storeSettings} = useApp();
+  const {deliveryType, setDeliveryType, address, setAddress, cartLines, storeSettings, shopRules, slot} = useApp();
   const [form, setForm] = useState(address);
   const [errors, setErrors] = useState({});
   const [saveForFuture, setSaveForFuture] = useState(true);
@@ -4094,6 +4191,8 @@ function CheckoutAddressPage(){
       if(!/^\d{10}$/.test(form.phone.trim())) e.phone='Enter a valid 10-digit phone number';
       if(!form.line1.trim()) e.line1='Address is required';
       if(!/^\d{6}$/.test(form.pincode.trim())) e.pincode='Enter a valid 6-digit PIN code';
+      else if((shopRules.serviceable_pins||[]).length && !shopRules.serviceable_pins.includes(form.pincode.trim())) e.pincode="Sorry, we don't deliver to this PIN code yet. Try store pickup instead.";
+      if(shopRules.slots_enabled && !slot) e.slot='Please choose a delivery time';
     }
     setErrors(e);
     return Object.keys(e).length===0;
@@ -4172,6 +4271,8 @@ function CheckoutAddressPage(){
                   </label>
                 </div>
               </div>
+              {shopRules.slots_enabled && <SlotPicker />}
+              {errors.slot && <div className="text-xs text-[var(--danger)] mt-1">{errors.slot}</div>}
             </div>
           ) : (
             <div className="card p-4 text-sm">
@@ -4362,7 +4463,7 @@ function CheckoutPaymentPage(){
 const PAYMENT_LABELS = {cod:'Cash on Delivery', upi:'UPI / QR Code', upiApps:'UPI Apps', phonepe:'PhonePe / Google Pay', paytm:'Paytm', card:'Card / Net Banking'};
 
 function CheckoutConfirmPage(){
-  const {cartLines, address, deliveryType, paymentMethod, upiAppChoice, subtotal, deliveryCharge, packagingCharge, total, placeOrder} = useApp();
+  const {cartLines, address, deliveryType, paymentMethod, upiAppChoice, subtotal, deliveryCharge, packagingCharge, total, placeOrder, slot, shopRules} = useApp();
   const [placing, setPlacing] = useState(false);
   useEffect(()=>{ if(cartLines.length===0) navigate('#/cart'); },[]);
 
@@ -4395,7 +4496,7 @@ function CheckoutConfirmPage(){
             </div>
             <div className="border-t border-dashed border-[var(--line)] my-3"></div>
             <div className="flex justify-between text-sm">
-              <div><div className="font-bold">Delivery Type</div><div className="text-[var(--muted)]">{deliveryType==='home'?'Home Delivery':'Store Pickup'}</div></div>
+              <div><div className="font-bold">Delivery Type</div><div className="text-[var(--muted)]">{deliveryType==='home'?'Home Delivery':'Store Pickup'}</div>{deliveryType==='home' && shopRules.slots_enabled && slot && <div className="text-[var(--purple)] text-xs font-semibold mt-0.5">🕐 {slot.date===slotDays().days[0].key?'Today':'Tomorrow'}, {slot.label}</div>}</div>
               <a href="#/checkout/address" className="text-xs font-bold text-[var(--purple)] focus-ring">Change</a>
             </div>
             <div className="border-t border-dashed border-[var(--line)] my-3"></div>
@@ -4714,8 +4815,15 @@ function OrdersPage(){
 
 function OrderDetailPage({route}){
   const orderId = route.parts[1];
-  const {orders, storeSettings, productMap} = useApp();
+  const {orders, storeSettings, productMap, addToCart, showToast} = useApp();
   const order = orders.find(o=>o.id===orderId);
+  const reorder = ()=>{
+    let added = 0, skipped = 0;
+    order.items.forEach(it=>{ const p = productMap[it.id]; if(p && p.stock>0){ addToCart(it.id, Math.min(it.qty, p.stock)); added++; } else skipped++; });
+    if(!added){ showToast('Those items are not available right now','⚠️'); return; }
+    if(skipped) showToast(skipped+' item'+(skipped>1?'s':'')+' no longer available','ℹ️');
+    navigate('#/cart');
+  };
   const [helpOpen, setHelpOpen] = useState(false);
   const [reviewProduct, setReviewProduct] = useState(null);
   if(!order) return <div className="p-8 text-center text-[var(--muted)]">Order not found. <a className="text-[var(--purple)] font-semibold" href="#/orders">Back to orders</a></div>;
@@ -4772,11 +4880,16 @@ function OrderDetailPage({route}){
           </div>
         ))}
         <div className="border-t border-dashed border-[var(--line)] my-2"></div>
+        {order.couponDiscount>0 && <div className="flex justify-between text-sm py-0.5"><span className="text-[var(--muted)]">Coupon ({order.couponCode})</span><span className="text-[var(--green)]">-{inr(order.couponDiscount)}</span></div>}
+        {order.rewardsUsed>0 && <div className="flex justify-between text-sm py-0.5"><span className="text-[var(--muted)]">Rewards used</span><span className="text-[var(--green)]">-{inr(order.rewardsUsed)}</span></div>}
         <div className="flex justify-between text-sm font-bold"><span>Total</span><span>{inr(order.total)}</span></div>
       </div>
 
+      <button onClick={reorder} className="btn-secondary w-full py-3 text-sm mb-4 focus-ring">🔁 Order again</button>
+
       <div className="card p-4 mb-4">
         <div className="font-bold text-sm mb-2">Delivery Address</div>
+        {order.slot && <div className="text-xs font-semibold text-[var(--purple)] mb-1">🕐 {order.slot}</div>}
         <div className="text-sm">{order.address.name}</div>
         <div className="text-xs text-[var(--muted)]">{order.address.line1}, {order.address.area}, {order.address.city} - {order.address.pincode}</div>
       </div>
@@ -6008,6 +6121,12 @@ function AdminOrderDetailModal({order, onUpdated, onClose}){
   return (
     <Modal onClose={onClose} title={'Order #'+(order.shortId||order.id)}>
       <div className="space-y-4 text-sm">
+        {(order.slot || order.couponCode) && (
+          <div className="p-3 rounded-xl bg-[var(--purple-light)] text-xs space-y-0.5">
+            {order.slot && <div>🕐 <b>Deliver:</b> {order.slot}</div>}
+            {order.couponCode && <div>🏷️ <b>Coupon:</b> {order.couponCode} (−{inr(order.couponDiscount)})</div>}
+          </div>
+        )}
         <div>
           <div className="font-bold mb-1.5">Update Status</div>
           <div className="flex flex-wrap gap-2">
@@ -6611,7 +6730,221 @@ function AdminSettings(){
         <div className="text-[11px] text-[var(--muted)] -mt-1">{form.chatbotEnabled!==false?'Chatbot is ON':'Chatbot is OFF'} — tap Save to apply.</div>
         <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 mt-2 focus-ring">{saving ? 'Saving…' : 'Save Store Settings'}</button>
       </div>
+      <OwnerAlertCard />
+      <ShopRulesCard />
+      <CouponsCard />
       <DeliveryPartnersCard />
+    </div>
+  );
+}
+
+function MiniSwitch({on, onChange, label}){
+  return (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={()=>onChange(!on)}
+      className={"relative w-12 h-7 rounded-full flex-shrink-0 transition-colors focus-ring "+(on?'bg-[var(--green)]':'bg-gray-300')}>
+      <span className={"absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform "+(on?'translate-x-5':'')}></span>
+    </button>
+  );
+}
+
+function ShopRulesCard(){
+  const {showToast, fetchShopRules} = useApp();
+  const [r, setR] = useState(null);
+  const [pins, setPins] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(()=>{
+    sbAdmin.rpc('admin_get_shop_rules').then(({data, error})=>{
+      if(error || !data){ setR(false); return; }
+      setR(data); setPins((data.serviceable_pins||[]).join(', '));
+    });
+  },[]);
+  if(r===null) return <div className="card p-5 mt-5 text-xs text-[var(--muted)]">Loading delivery rules…</div>;
+  if(r===false) return <div className="card p-5 mt-5 text-xs text-[var(--danger)]">Could not load delivery rules.</div>;
+  const set = (k,v)=> setR(prev=>({...prev,[k]:v}));
+  const num = (k,label,hint)=> (
+    <div>
+      <label className="text-xs font-semibold text-[var(--muted)]">{label}</label>
+      <input type="number" min="0" inputMode="decimal" value={r[k]} onChange={e=>set(k, e.target.value===''?'':Number(e.target.value))} className="w-full mt-1 border border-[var(--line)] bg-transparent rounded-lg px-3 py-2 text-sm focus-ring" />
+      {hint && <div className="text-[10px] text-[var(--muted)] mt-0.5">{hint}</div>}
+    </div>
+  );
+  const slots = r.slots || [];
+  const setSlot = (i,patch)=> set('slots', slots.map((s,j)=> j===i ? {...s,...patch} : s));
+  const save = async ()=>{
+    setSaving(true);
+    const pinList = pins.split(/[\s,;]+/).filter(Boolean);
+    const { data, error } = await sbAdmin.rpc('admin_save_shop_rules', { p: {...r, serviceable_pins: pinList} });
+    setSaving(false);
+    if(error){ showToast('Could not save','⚠️'); return; }
+    setR(data); setPins((data.serviceable_pins||[]).join(', '));
+    fetchShopRules && fetchShopRules();
+    showToast('Delivery rules saved','✅');
+  };
+  const row = (title, sub, key)=> (
+    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[var(--purple-light)]">
+      <div className="min-w-0"><div className="text-sm font-bold">{title}</div><div className="text-xs text-[var(--muted)]">{sub}</div></div>
+      <MiniSwitch on={!!r[key]} onChange={v=>set(key,v)} label={title} />
+    </div>
+  );
+  return (
+    <div className="card p-5 mt-5 space-y-3">
+      <div className="font-bold text-sm">🚚 Delivery rules & automatic messages</div>
+      <div className="grid grid-cols-2 gap-3">
+        {num('delivery_charge','Delivery charge (₹)')}
+        {num('packaging_charge','Packaging charge (₹)')}
+        {num('free_delivery_above','Free delivery above (₹)')}
+        {num('min_order','Minimum order (₹)','0 = no minimum')}
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-[var(--muted)]">Areas we deliver to (PIN codes)</label>
+        <textarea rows="2" value={pins} onChange={e=>setPins(e.target.value)} placeholder="302001, 302004, 302017" className="w-full mt-1 border border-[var(--line)] bg-transparent rounded-lg px-3 py-2 text-sm focus-ring" />
+        <div className="text-[10px] text-[var(--muted)] mt-0.5">Leave empty to deliver everywhere. Separate PIN codes with commas. Pickup is always allowed.</div>
+      </div>
+      {row('🕐 Delivery time slots','Customers pick a window (today / tomorrow) at checkout.','slots_enabled')}
+      {r.slots_enabled && (
+        <div className="space-y-2">
+          {slots.map((s,i)=> (
+            <div key={i} className="flex gap-2 items-center">
+              <input value={s.label} onChange={e=>setSlot(i,{label:e.target.value})} maxLength={40} className="flex-1 min-w-0 border border-[var(--line)] bg-transparent rounded-lg px-3 py-2 text-sm focus-ring" aria-label="Slot name" />
+              <select value={s.end} onChange={e=>setSlot(i,{end:Number(e.target.value)})} className="border border-[var(--line)] bg-transparent rounded-lg px-2 py-2 text-xs focus-ring" aria-label="Window ends at">
+                {Array.from({length:24},(_,h)=>h+1).map(h=> <option key={h} value={h}>ends {h<=12?h:h-12} {h<12||h===24?'AM':'PM'}</option>)}
+              </select>
+              <button type="button" onClick={()=>set('slots', slots.filter((_,j)=>j!==i))} aria-label="Remove slot" className="text-[var(--danger)] focus-ring">🗑️</button>
+            </div>
+          ))}
+          {slots.length<6 && <button type="button" onClick={()=>set('slots',[...slots,{label:'New slot',end:20}])} className="text-xs font-bold text-[var(--purple)] focus-ring">+ Add a slot</button>}
+          <div className="text-[10px] text-[var(--muted)]">Today's slots disappear automatically once their end time has passed.</div>
+        </div>
+      )}
+      {row('🛒 Cart reminders','Nudge shoppers who leave items in their cart (9 AM – 8 PM only, once per cart).','cart_reminder_enabled')}
+      {r.cart_reminder_enabled && num('cart_reminder_hours','Remind after (hours)','Sent only to people who allowed offers / promotions.')}
+      {row('📧 Email me new orders','Get an email for every new order (needs email set up in the Emails tab).','owner_alert_email')}
+      <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 focus-ring">{saving?'Saving…':'Save delivery rules'}</button>
+    </div>
+  );
+}
+
+function OwnerAlertCard(){
+  const {showToast} = useApp();
+  const [state, setState] = useState('checking'); // checking | unsupported | off | on | denied
+  const [busy, setBusy] = useState(false);
+  const refresh = useCallback(async ()=>{
+    if(!pushApiSupported()){ setState(isIOSDevice() && !isStandaloneApp() ? 'ios' : 'unsupported'); return; }
+    if(Notification.permission==='denied'){ setState('denied'); return; }
+    const {sub} = await getPushSubscription();
+    if(!sub || Notification.permission!=='granted'){ setState('off'); return; }
+    const { data } = await sbAdmin.from('push_subscriptions').select('id').eq('endpoint', sub.endpoint).maybeSingle();
+    setState(data ? 'on' : 'off');
+  },[]);
+  useEffect(()=>{ refresh(); },[refresh]);
+  const enable = async ()=>{
+    setBusy(true);
+    try{
+      const perm = await Notification.requestPermission();
+      if(perm!=='granted'){ setState(perm==='denied'?'denied':'off'); return; }
+      const reg = await registerMerakiSW();
+      if(!reg) throw new Error('no sw');
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if(!sub) sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64ToUint8(VAPID_PUBLIC_KEY)});
+      const j = sub.toJSON();
+      const {error} = await sbAdmin.rpc('register_push_subscription', {p_endpoint:j.endpoint, p_p256dh:j.keys.p256dh, p_auth:j.keys.auth, p_ua:navigator.userAgent});
+      if(error) throw error;
+      setState('on'); showToast('This device will get new-order alerts','🔔');
+    }catch(e){ showToast("Couldn't turn on alerts",'⚠️'); }
+    finally{ setBusy(false); }
+  };
+  const disable = async ()=>{
+    setBusy(true);
+    try{
+      const {sub} = await getPushSubscription();
+      if(sub){ await sbAdmin.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); await sub.unsubscribe(); }
+      setState('off');
+    }catch(e){ showToast("Couldn't turn off alerts",'⚠️'); }
+    finally{ setBusy(false); }
+  };
+  return (
+    <div className="card p-5 mt-5">
+      <div className="font-bold text-sm">🔔 New-order alerts on this device</div>
+      <div className="text-xs text-[var(--muted)] mt-0.5 mb-3">Get a push notification here the moment a customer places an order. Turn it on from the phone you keep at the shop.</div>
+      {state==='checking' && <div className="text-xs text-[var(--muted)]">Checking…</div>}
+      {state==='unsupported' && <div className="text-xs text-[var(--muted)]">This browser can't receive push notifications.</div>}
+      {state==='ios' && <div className="text-xs text-[var(--muted)]">On iPhone, first add the app to your Home Screen, then open it from there.</div>}
+      {state==='denied' && <div className="text-xs text-[var(--danger)]">Notifications are blocked for this site — allow them in your browser/phone settings, then come back.</div>}
+      {state==='off' && <button onClick={enable} disabled={busy} className="btn-primary w-full py-2.5 text-sm focus-ring">{busy?'Please wait…':'Turn on alerts for this device'}</button>}
+      {state==='on' && (
+        <div className="flex items-center gap-3">
+          <div className="flex-1 text-xs font-semibold text-[var(--green)]">✅ On — this device gets new-order alerts.</div>
+          <button onClick={disable} disabled={busy} className="text-xs font-bold text-[var(--danger)] focus-ring">Turn off</button>
+        </div>
+      )}
+      <div className="text-[10px] text-[var(--muted)] mt-2">If you also shop on this same phone with a different customer account, alerts follow whichever account used the app last — use a separate browser or device for the shop.</div>
+    </div>
+  );
+}
+
+function CouponsCard(){
+  const {showToast} = useApp();
+  const [list, setList] = useState(null);
+  const blank = {code:'', kind:'percent', value:'', min_order:'', max_discount:'', expires:'', usage_limit:'', per_customer:'1', description:''};
+  const [f, setF] = useState(blank);
+  const [saving, setSaving] = useState(false);
+  const load = useCallback(()=>{ sbAdmin.from('coupons').select('*').order('created_at',{ascending:false}).then(({data,error})=> setList(error?[]:(data||[]))); },[]);
+  useEffect(()=>{ load(); },[load]);
+  const upd = (k,v)=> setF(prev=>({...prev,[k]:v}));
+  const create = async ()=>{
+    const code = f.code.trim().toUpperCase();
+    if(!/^[A-Z0-9_-]{3,20}$/.test(code)){ showToast('Code: 3–20 letters/numbers','⚠️'); return; }
+    if(!(Number(f.value)>0)){ showToast('Enter the discount amount','⚠️'); return; }
+    if(f.kind==='percent' && Number(f.value)>100){ showToast('Percent can’t be above 100','⚠️'); return; }
+    setSaving(true);
+    const { error } = await sbAdmin.from('coupons').insert({
+      code, kind:f.kind, value:Number(f.value), min_order:Number(f.min_order)||0,
+      max_discount: f.max_discount===''?null:Number(f.max_discount),
+      expires_at: f.expires ? new Date(f.expires+'T23:59:59+05:30').toISOString() : null,
+      usage_limit: f.usage_limit===''?null:Number(f.usage_limit),
+      per_customer: Math.max(1, Number(f.per_customer)||1),
+      description: f.description.trim() || null,
+    });
+    setSaving(false);
+    if(error){ showToast(error.code==='23505' ? 'That code already exists' : 'Could not create coupon','⚠️'); return; }
+    setF(blank); load(); showToast('Coupon created','🏷️');
+  };
+  const toggle = async (c)=>{ const {error} = await sbAdmin.from('coupons').update({active:!c.active}).eq('code', c.code); if(error){ showToast('Could not update','⚠️'); return; } load(); };
+  const remove = async (c)=>{ if(!window.confirm('Delete coupon '+c.code+'?')) return; const {error} = await sbAdmin.from('coupons').delete().eq('code', c.code); if(error){ showToast('Could not delete','⚠️'); return; } load(); };
+  const inp = "w-full mt-1 border border-[var(--line)] bg-transparent rounded-lg px-3 py-2 text-sm focus-ring";
+  return (
+    <div className="card p-5 mt-5">
+      <div className="font-bold text-sm">🏷️ Coupon codes</div>
+      <div className="text-xs text-[var(--muted)] mt-0.5 mb-3">Customers type a code in their cart. Discounts are checked on the server.</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Code</label><input value={f.code} onChange={e=>upd('code',e.target.value.toUpperCase())} maxLength={20} placeholder="WELCOME10" className={inp} /></div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Type</label>
+          <select value={f.kind} onChange={e=>upd('kind',e.target.value)} className={inp}><option value="percent">Percent off</option><option value="flat">Flat ₹ off</option></select></div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">{f.kind==='percent'?'Percent (%)':'Amount (₹)'}</label><input type="number" min="0" value={f.value} onChange={e=>upd('value',e.target.value)} className={inp} /></div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Min. order (₹)</label><input type="number" min="0" value={f.min_order} onChange={e=>upd('min_order',e.target.value)} placeholder="0" className={inp} /></div>
+        {f.kind==='percent' && <div><label className="text-xs font-semibold text-[var(--muted)]">Max discount (₹)</label><input type="number" min="0" value={f.max_discount} onChange={e=>upd('max_discount',e.target.value)} placeholder="no cap" className={inp} /></div>}
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Expires on</label><input type="date" value={f.expires} onChange={e=>upd('expires',e.target.value)} className={inp} /></div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Total uses</label><input type="number" min="1" value={f.usage_limit} onChange={e=>upd('usage_limit',e.target.value)} placeholder="unlimited" className={inp} /></div>
+        <div><label className="text-xs font-semibold text-[var(--muted)]">Uses per customer</label><input type="number" min="1" value={f.per_customer} onChange={e=>upd('per_customer',e.target.value)} className={inp} /></div>
+        <div className="col-span-2"><label className="text-xs font-semibold text-[var(--muted)]">Message shown when applied (optional)</label><input value={f.description} onChange={e=>upd('description',e.target.value)} maxLength={60} placeholder="Welcome offer applied" className={inp} /></div>
+      </div>
+      <button onClick={create} disabled={saving} className="btn-primary w-full py-2.5 mt-3 text-sm focus-ring">{saving?'Creating…':'Create coupon'}</button>
+      <div className="mt-4 space-y-2">
+        {list===null ? <div className="text-xs text-[var(--muted)]">Loading…</div> : list.length===0 ? <div className="text-xs text-[var(--muted)]">No coupons yet.</div> : list.map(c=> {
+          const expired = c.expires_at && new Date(c.expires_at) < new Date();
+          return (
+            <div key={c.code} className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--purple-light)]">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold break-all">{c.code} <span className="font-normal text-[var(--muted)]">· {c.kind==='percent'?c.value+'% off':inr(c.value)+' off'}</span></div>
+                <div className="text-[11px] text-[var(--muted)]">Used {c.used_count}{c.usage_limit?'/'+c.usage_limit:''} · {c.min_order>0?'min '+inr(c.min_order)+' · ':''}{c.expires_at?(expired?'expired ':'until ')+new Date(c.expires_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'no expiry'}</div>
+              </div>
+              <MiniSwitch on={c.active} onChange={()=>toggle(c)} label={'Enable '+c.code} />
+              <button onClick={()=>remove(c)} aria-label={'Delete '+c.code} className="text-[var(--danger)] focus-ring flex-shrink-0">🗑️</button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
