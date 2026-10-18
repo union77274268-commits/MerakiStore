@@ -223,6 +223,7 @@
       '<div class="small muted">' + (o.status === 'Delivered' && o.delivered_at ? 'Delivered ' + ago(o.delivered_at) : 'Ordered ' + ago(o.created_at)) + '</div>' +
       '<div class="name">' + esc(a.name || 'Customer') + '</div>' +
       '<div class="addr">' + (a.lat && a.lng ? '📍 ' : '') + esc(ad.l1 || '—') + '<br><span class="muted">' + esc(ad.l2) + '</span></div>' +
+      (a.slot ? '<div class="addr" style="margin-top:6px;font-weight:700">🕐 ' + esc(a.slot) + '</div>' : '') +
       (ph ? '<div class="small muted" style="margin-top:4px">📱 ' + esc(a.phone) + '</div>' : '') +
       ((a.instructions || o.notes) ? '<div class="note">📝 ' + esc(a.instructions || o.notes) + '</div>' : '') +
       '<div class="items">' + items + '</div>' + (o.status !== 'Delivered' ? payBlock(o) : '') +
