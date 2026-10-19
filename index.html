@@ -3687,7 +3687,7 @@ function ProductPage({route}){
 /* Extra product-page sections: details table, delivery & returns, real reviews preview, ask-the-assistant,
    then personalised / recently-viewed shelves. Everything here is real data — nothing invented. */
 function ProductExtraSections({product}){
-  const {storeSettings, orders, products} = useApp();
+  const {storeSettings, orders, products, shopRules} = useApp();
   const [reviews, setReviews] = useState(null);
   const [openFaq, setOpenFaq] = useState(-1);
   const [reviewsOpen, setReviewsOpen] = useState(false);
