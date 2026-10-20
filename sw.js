@@ -1,7 +1,35 @@
 /* Meraki service worker — receives push notifications even when the app is closed. */
 const PAGE = new URL(self.location.href).searchParams.get('page') || '/';
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+
+// ---- App-shell cache: opens instantly and still opens with no internet. Pages are always fetched fresh first. ----
+const SHELL = 'meraki-shell-v1';
+const LIBS = /^https:\/\/(cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|cdn\.tailwindcss\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  try { const keys = await caches.keys(); await Promise.all(keys.filter((k) => k.startsWith('meraki-shell-') && k !== SHELL).map((k) => caches.delete(k))); } catch (err) {}
+  await self.clients.claim();
+})()));
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  let url; try { url = new URL(req.url); } catch (e) { return; }
+  if (url.origin === self.location.origin) {
+    if (url.pathname.endsWith('/sw.js')) return;
+    // our own pages and images: network first, saved copy only when offline
+    event.respondWith(fetch(req).then((res) => {
+      if (res && res.ok && res.type === 'basic') { const copy = res.clone(); caches.open(SHELL).then((c) => c.put(req, copy)).catch(() => {}); }
+      return res;
+    }).catch(async () => (await caches.match(req)) || (req.mode === 'navigate' ? await caches.match(self.registration.scope) : undefined) || Response.error()));
+  } else if (LIBS.test(req.url)) {
+    // libraries and fonts: show the saved copy straight away, refresh it in the background
+    event.respondWith(caches.open(SHELL).then(async (c) => {
+      const hit = await c.match(req);
+      const net = fetch(req).then((res) => { if (res && (res.ok || res.type === 'opaque')) c.put(req, res.clone()).catch(() => {}); return res; }).catch(() => hit);
+      return hit || net;
+    }));
+  }
+});
 
 self.addEventListener('push', (event) => {
   let d = {};
@@ -30,11 +58,15 @@ self.addEventListener('notificationclick', (event) => {
   const hash = (event.notification.data && event.notification.data.url) || '#/home';
   // Use the service-worker scope (the site root) as the base: it is always inside the installed app's scope.
   const root = self.registration.scope;
-  const target = root + hash;
+  // owner alerts open the separately-installed Admin app; everything else opens the store
+  const isAdminLink = hash.startsWith('#/admin');
+  const target = root + (isAdminLink ? 'admin/' : '') + hash;
+  const inAdmin = (u) => { try { return new URL(u).pathname.startsWith('/admin'); } catch (e) { return false; } };
+  const inDelivery = (u) => { try { return new URL(u).pathname.startsWith('/delivery'); } catch (e) { return false; } };
   event.waitUntil((async () => {
     let wins = [];
     try { wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true }); } catch (e) {}
-    const mine = wins.find((c) => { try { return new URL(c.url).origin === self.location.origin; } catch (e) { return false; } });
+    const mine = wins.find((c) => { try { return new URL(c.url).origin === self.location.origin && !inDelivery(c.url) && (isAdminLink ? inAdmin(c.url) : !inAdmin(c.url)); } catch (e) { return false; } });
     if (mine) {
       try { if ('focus' in mine) await mine.focus(); } catch (e) {}
       mine.postMessage({ type: 'navigate', url: hash });
