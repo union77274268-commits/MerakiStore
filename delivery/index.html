@@ -3,11 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#6C3FC5" />
+<meta name="theme-color" content="#1E9E5A" />
+<link rel="manifest" href="/delivery/manifest.webmanifest" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Delivery" />
 <meta name="robots" content="noindex" />
-<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png" />
-<link rel="shortcut icon" href="../favicon.ico" />
-<link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+<meta name="robots" content="noindex" />
+<link rel="icon" type="image/png" sizes="32x32" href="/delivery/favicon-32.png" />
+<link rel="apple-touch-icon" href="/delivery/apple-touch-icon.png" />
 <title>Meraki Delivery</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -388,5 +391,6 @@
   boot();
 })();
 </script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js?page=delivery').catch(function(){});});}</script>
 </body>
 </html>
