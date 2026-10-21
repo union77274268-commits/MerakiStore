@@ -85,6 +85,45 @@
   @keyframes r{to{transform:rotate(360deg)}}
   .noscript{padding:30px;text-align:center;}
 </style>
+<style id="emo-css">/* ===== line icons (replace emojis) ===== */
+.ei{width:1.15em;height:1.15em;display:inline-block;vertical-align:-.22em;fill:none;stroke:currentColor;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round;flex:none;overflow:visible}
+.ei *{stroke-dasharray:1;stroke-dashoffset:1;animation:ei-draw .7s cubic-bezier(.4,0,.2,1) .05s forwards}
+.ei .f{fill:currentColor;stroke:none;stroke-dasharray:none;stroke-dashoffset:0;animation:ei-fade .5s ease both}
+.ei-dotG{color:#1E9E5A}.ei-dotR{color:#E0455D}
+@keyframes ei-draw{to{stroke-dashoffset:0}}
+@keyframes ei-fade{from{opacity:0;transform:scale(.4)}}
+@keyframes ei-ring{0%,60%,100%{transform:rotate(0)}6%,18%,30%{transform:rotate(14deg)}12%,24%,36%{transform:rotate(-14deg)}}
+@keyframes ei-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes ei-drive{0%,100%{transform:translateX(-1px)}50%{transform:translateX(1.5px)}}
+@keyframes ei-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+@keyframes ei-beat{0%,60%,100%{transform:scale(1)}15%{transform:scale(1.16)}30%{transform:scale(.97)}45%{transform:scale(1.1)}}
+@keyframes ei-twinkle{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.14) rotate(10deg)}}
+@keyframes ei-flicker{0%,100%{transform:scale(1,1)}30%{transform:scale(.96,1.07)}60%{transform:scale(1.03,.97)}}
+@keyframes ei-wiggle{0%,70%,100%{transform:rotate(0)}78%{transform:rotate(-8deg)}86%{transform:rotate(8deg)}94%{transform:rotate(-4deg)}}
+@keyframes ei-flip{0%,70%{transform:rotate(0)}90%,100%{transform:rotate(180deg)}}
+@keyframes ei-spin{to{transform:rotate(360deg)}}
+@keyframes ei-look{0%,100%{transform:translateX(0)}30%{transform:translateX(-1.5px)}70%{transform:translateX(1.5px)}}
+@keyframes ei-wave{0%,60%,100%{transform:rotate(0)}70%{transform:rotate(16deg)}80%{transform:rotate(-8deg)}90%{transform:rotate(14deg)}}
+@keyframes ei-pop{0%{transform:scale(.6)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+.ei-bell{transform-origin:50% 10%;animation:ei-ring 4s ease-in-out 1s infinite}
+.ei-cart,.ei-bag,.ei-box,.ei-gift,.ei-store{animation:ei-bob 3s ease-in-out infinite}
+.ei-gift{animation:ei-wiggle 4s ease-in-out 1.2s infinite;transform-origin:50% 100%}
+.ei-truck,.ei-scooter,.ei-car{animation:ei-drive 1.8s ease-in-out infinite}
+.ei-alert,.ei-mic,.ei-target,.ei-antenna{animation:ei-pulse 2.2s ease-in-out infinite}
+.ei-heart{animation:ei-beat 2.2s ease-in-out infinite}
+.ei-sparkle{animation:ei-twinkle 2.6s ease-in-out infinite}
+.ei-flame{transform-origin:50% 100%;animation:ei-flicker 1.2s ease-in-out infinite}
+.ei-hourglass{animation:ei-flip 4s ease-in-out infinite}
+.ei-clock .mh{transform-origin:12px 12px;animation:ei-draw .7s forwards,ei-spin 8s linear .8s infinite}
+.ei-clock .hh{transform-origin:12px 12px;animation:ei-draw .7s forwards,ei-spin 60s linear .8s infinite}
+.ei-eyes{animation:ei-look 3.5s ease-in-out infinite}
+.ei-hand{transform-origin:60% 90%;animation:ei-wave 3.5s ease-in-out 1s infinite}
+.ei-check,.ei-party{animation:ei-pop .5s ease-out both}
+.ei-phone{animation:ei-wiggle 5s ease-in-out infinite}
+.ei-pin{transform-origin:50% 100%;animation:ei-bob 2.4s ease-in-out infinite}
+.ei-teddy,.ei-mail,.ei-printer,.ei-truck{will-change:transform}
+@media (prefers-reduced-motion:reduce){.ei,.ei *{animation:none!important;stroke-dashoffset:0!important;opacity:1!important}}
+</style>
 </head>
 <body>
 <noscript><div class="noscript">Please enable JavaScript to use the Meraki delivery app.</div></noscript>
@@ -392,5 +431,148 @@
 })();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js?page=delivery').catch(function(){});});}</script>
+<script id="emo-js">/* ===== Meraki line icons: every emoji shown in the app is swapped for a thick black line SVG (animated) ===== */
+const EI_SRC = {
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  alert:'<path d="M12 4L2.8 19.5h18.4z"/><path d="M12 10v4.3M12 17.4h.01"/>',
+  bell:'<path d="M5 18h14l-1.6-2.2V11a5.4 5.4 0 0 0-10.8 0v4.8z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
+  bellOff:'<path d="M5 18h14l-1.6-2.2V11a5.4 5.4 0 0 0-10.8 0v4.8z"/><path d="M10 21a2 2 0 0 0 4 0M3.5 3.5l17 17"/>',
+  pin:'<path d="M12 21s7-6.2 7-11.5a7 7 0 0 0-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.4"/>',
+  phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+  mobile:'<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  sparkle:'<path d="M11 3c.8 4.6 2.4 6.2 7 7-4.6.8-6.2 2.4-7 7-.8-4.6-2.4-6.2-7-7 4.6-.8 6.2-2.4 7-7z"/><path d="M19 15v4M17 17h4"/>',
+  star:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8z"/>',
+  starFill:'<path class="f" d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8z"/>',
+  cart:'<path d="M2.5 3.5h3l2.4 11h10.3l2-8H6.3"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17" cy="19.5" r="1.4"/>',
+  bag:'<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+  hand:'<path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 7-6 7-2.5 0-4-1.2-5.5-3.5L3 13.5a1.5 1.5 0 0 1 2.5-1.5L8 15"/>',
+  chat:'<path d="M4 5h16v11H10l-4.5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+  tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>',
+  heart:'<path d="M12 20.5S3.5 15 3.5 8.8A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 8.5 2.2C20.5 15 12 20.5 12 20.5z"/>',
+  heartBreak:'<path d="M12 20.5S3.5 15 3.5 8.8A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 8.5 2.2C20.5 15 12 20.5 12 20.5z"/><path d="M12 6.6l-2 3.6 3 2.2-2 3.6"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path class="hh" d="M12 12l3.5 2"/><path class="mh" d="M12 12V6.5"/>',
+  alarm:'<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M4 5.5L7 3M20 5.5L17 3"/>',
+  hourglass:'<path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  lock:'<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 15v2"/>',
+  key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/>',
+  teddy:'<circle cx="12" cy="13" r="7"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="6.5" r="2.5"/><circle cx="12" cy="14.5" r="2"/><path d="M9.5 11h.01M14.5 11h.01"/>',
+  trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+  store:'<path d="M3 9l1.5-5h15L21 9M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M5 12v8h14v-8M10 20v-5h4v5"/>',
+  mail:'<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3.5 7l8.5 6.5L20.5 7"/>',
+  flame:'<path d="M12 21c-4 0-6.5-2.7-6.5-6.2 0-3 2-4.6 3.2-7 .6 1.4 1.3 2 2 2.2C10.5 6.2 11.5 4 14 2.5c.5 3 4.5 5 4.5 11.3C18.5 18.4 16 21 12 21z"/><path d="M12 21c-1.8 0-3-1.2-3-2.8 0-1.6 1.4-2.2 3-4 1.8 1.8 3 2.4 3 4 0 1.6-1.2 2.8-3 2.8z"/>',
+  truck:'<path d="M2.5 6h11v10h-11zM13.5 9.5h4l3 3.5v3h-7"/><circle cx="7" cy="17.5" r="2"/><circle cx="17" cy="17.5" r="2"/>',
+  scooter:'<circle cx="6" cy="17.5" r="3"/><circle cx="18.5" cy="17.5" r="3"/><path d="M6 17.5h6l3-9h3M9.5 8.5h3"/>',
+  car:'<path d="M3 15l1.5-5.5A2 2 0 0 1 6.4 8h11.2a2 2 0 0 1 1.9 1.5L21 15v3H3z"/><circle cx="7.5" cy="15.5" r="1.3"/><circle cx="16.5" cy="15.5" r="1.3"/>',
+  party:'<path d="M3.5 20.5L8 8l8 8z"/><path d="M13 5.5v.01M17 3.5v2M19.5 9h2M15.5 9.5l2-2"/>',
+  box:'<path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
+  undo:'<path d="M9.5 6L4 11.5 9.5 17"/><path d="M4.5 11.5H15a5 5 0 0 1 0 10h-3"/>',
+  repeat:'<path d="M17 3l3 3-3 3M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3M20 13v2a3 3 0 0 1-3 3H4"/>',
+  rotate:'<path d="M4 4v6h6"/><path d="M4.5 14a8 8 0 1 0 2-7.5L4 10"/>',
+  gift:'<rect x="3.5" y="9" width="17" height="4" rx="1"/><path d="M5 13v7.5h14V13M12 9v11.5M12 9C9 9 7.5 7.5 8 5.5s3.5-1 4 3.5zM12 9c3 0 4.5-1.5 4-3.5s-3.5-1-4 3.5z"/>',
+  backpack:'<path d="M6 10a6 6 0 0 1 12 0v9.5a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M9.5 4.5a2.5 2.5 0 0 1 5 0M9 15h6v3H9z"/>',
+  pencil:'<path d="M4 20l1-4L16.5 4.5l3 3L8 19z"/><path d="M14 7l3 3"/>',
+  crayon:'<path d="M14 4l6 6-9 9H5v-6z"/><path d="M5 19l-1 2M11 7l6 6"/>',
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/>',
+  camera:'<path d="M3.5 8h4l2-3h5l2 3h4v11.5h-17z"/><circle cx="12" cy="13.5" r="3.5"/>',
+  download:'<path d="M12 3.5v12M7 11l5 5 5-5M4.5 20.5h15"/>',
+  upload:'<path d="M12 16.5v-13M7 8l5-5 5 5M4.5 20.5h15"/>',
+  faceSleep:'<circle cx="12" cy="12" r="9"/><path d="M8 11h2.5M13.5 11H16M9.5 16h5"/>',
+  faceSad:'<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M8.5 16.5c1-1.4 2.2-2 3.5-2s2.5.6 3.5 2"/>',
+  faceSmile:'<circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M8.5 14c1 1.8 2.2 2.6 3.5 2.6s2.5-.8 3.5-2.6"/>',
+  eyes:'<ellipse cx="8" cy="12" rx="4" ry="5"/><ellipse cx="16" cy="12" rx="4" ry="5"/><path d="M8.5 12.5h.01M16.5 12.5h.01"/>',
+  eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/>',
+  thumb:'<path d="M7 11v9H4v-9zM7 11l4-7c1.7 0 2.5 1 2.2 2.8L12.8 10H19a1.8 1.8 0 0 1 1.8 2.2l-1.5 6.5A2 2 0 0 1 17.4 20H7"/>',
+  book:'<path d="M5 3.5h12.5A1.5 1.5 0 0 1 19 5v14.5H6.5A1.5 1.5 0 0 1 5 18z"/><path d="M5 18a1.5 1.5 0 0 1 1.5-1.5H19M9 7.5h6"/>',
+  folder:'<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.8l2 2.5h8.2A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/>',
+  palette:'<path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2.2-.5-1.3.3-2.3 1.7-2.3H18a3 3 0 0 0 3-3C21 7 17 3 12 3z"/><path d="M7.5 11h.01M10 7.5h.01M15 7.5h.01"/>',
+  brush:'<path d="M20 4l-8.5 8.5M9.5 11.5l3 3M9.5 14.5C7 14.5 6.5 17 5 18.5 6.5 20 10 20.5 11.5 18c.8-1.2.5-2.5-.5-3.5"/>',
+  puzzle:'<path d="M10 4.5a1.8 1.8 0 0 1 3.6 0V6H18v4.4h-1.5a1.8 1.8 0 0 0 0 3.6H18v5H13.6v-1.5a1.8 1.8 0 0 0-3.6 0V19H5.5v-4.4H7a1.8 1.8 0 0 0 0-3.6H5.5V6H10z"/>',
+  search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5"/>',
+  printer:'<path d="M7 9V3.5h10V9M7 17.5H4.5V9h15v8.5H17"/><rect x="7" y="14" width="10" height="6.5"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3.3-3.3a4 4 0 0 0-5.7-5.7L12 6.3M14 10a4 4 0 0 0-5.7 0L5 13.3A4 4 0 0 0 10.7 19L12 17.7"/>',
+  clapper:'<rect x="3.5" y="9" width="17" height="11" rx="2"/><path d="M3.5 9l17-4M8 7.5l2.5 3M13 6l2.5 3"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
+  image:'<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-4.5 3.5 3 3-2.5 4.5 4"/>',
+  card:'<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6 15h4"/>',
+  clip:'<path d="M20 11.5l-7.5 7.5a5 5 0 0 1-7-7l8-8a3.3 3.3 0 0 1 4.7 4.7l-8 8a1.7 1.7 0 0 1-2.4-2.4l7-7"/>',
+  candy:'<circle cx="12" cy="12" r="4.5"/><path d="M7.5 9L3 6.5v11L7.5 15M16.5 9L21 6.5v11L16.5 15"/>',
+  soap:'<rect x="4" y="9" width="16" height="10" rx="3"/><circle cx="8" cy="5" r="1.7"/><circle cx="14" cy="4.5" r="1.2"/>',
+  triangle:'<path d="M3.5 20.5V3.5l17 17z"/><path d="M7.5 15.5v1M7.5 11.5v1"/>',
+  scissors:'<circle cx="6" cy="6.5" r="2.7"/><circle cx="6" cy="17.5" r="2.7"/><path d="M8.2 8.2L20 19M8.2 15.8L20 5"/>',
+  dice:'<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M8.5 8.5h.01M12 12h.01M15.5 15.5h.01"/>',
+  bricks:'<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 9.7h18M3 14.3h18M9 5v4.7M15 9.7v4.6M9 14.3V19"/>',
+  ban:'<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+  antenna:'<path d="M12 12v9M8 21h8"/><circle cx="12" cy="10" r="1.6"/><path d="M7.5 5.5a6.4 6.4 0 0 0 0 9M16.5 5.5a6.4 6.4 0 0 1 0 9"/>',
+  trend:'<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>',
+  chart:'<path d="M4 20.5h16.5M7 17v-5M12 17V7M17 17v-8"/>',
+  shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9.5C7.5 20 4 17 4 12V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  toolbox:'<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V5.5h6V8M3 13h18M11 13v2h2v-2"/>',
+  bird:'<path d="M3 9l5 1c1-3 4-4.5 6.5-3.5L18 5l-.5 2.5C20 9 21 12 19.5 15c-1.5 3.5-5 5.5-9 5.5C6 20.5 4 18 4 15z"/>',
+  target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12h.01"/>',
+  broom:'<path d="M19.5 3.5L11 12M8 11l5 5c-1 4-4 5-8 5 0-4 1-8 3-10z"/>',
+  door:'<path d="M6 21V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21M3.5 21h17M14 12h.01"/>',
+  ticket:'<path d="M3 7.5h18v3a1.8 1.8 0 0 0 0 3.5v3H3v-3a1.8 1.8 0 0 0 0-3.5z"/><path d="M14 8v2M14 14v2"/>',
+  money:'<circle cx="12" cy="12" r="9"/><path d="M8.5 8h7M8.5 11h7M8.5 8c3.5 0 5 1.2 5 3s-2 3-5 3l6 3.5"/>',
+  megaphone:'<path d="M3.5 10.5v3l11 4.5V6zM14.5 8.5h3a2.5 2.5 0 0 1 0 7h-3M6 14l1 5h3l-1-4.5"/>',
+  send:'<path d="M3 11.5L21 3l-8 18-2.5-7.5z"/>',
+  arrowR:'<path d="M4 12h15M13 6l6 6-6 6"/>',
+  arrowL:'<path d="M20 12H5M11 6l-6 6 6 6"/>',
+  arrowU:'<path d="M12 20V5M6 11l6-6 6 6"/>',
+  arrowD:'<path d="M12 4v15M6 13l6 6 6-6"/>',
+  dotG:'<circle class="f" cx="12" cy="12" r="5"/>',
+  dotR:'<circle class="f" cx="12" cy="12" r="5"/>',
+  qr:'<rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.2"/><path d="M14 14h2.5v2.5H14zM19 14v.01M14 20.5v.01M17.5 18.5H20.5V20.5"/>',
+  rupee:'<path d="M7 5h10M7 9h10M7 5c5 0 6.5 1.8 6.5 4s-2.5 4-6.5 4l7 6"/>',
+  tap:'<rect x="4" y="6" width="16" height="12" rx="3"/><path d="M9 10.5a3 3 0 0 1 0 3M12 9a5.5 5.5 0 0 1 0 6M15 7.5a8 8 0 0 1 0 9"/>',
+  wallet:'<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="3.5" y="8" width="17" height="11.5" rx="2.5"/><path d="M16 13.5h.01"/>',
+  compass:'<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+  note:'<path d="M6 3.5h9l4 4V20.5H6z"/><path d="M14.5 3.5V8H19M9 13h6M9 16.5h4"/>',
+  flag:'<path d="M5 21V4M5 4h12l-2 4 2 4H5"/>',
+  inbox:'<path d="M3 13l2.5-8h13L21 13v6.5H3zM3 13h5a4 4 0 0 0 8 0h5"/>',
+  phoneRupee:'<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10 8h4M10 11h4M10 8c2.4 0 3 .8 3 1.7s-1.2 1.8-3 1.8l3.2 3"/>'
+};
+// emoji (without the variation selector) -> icon
+const EI_MAP = {
+  '⚠':'alert','✅':'check','✓':'check','✔':'check','✔️':'check','❌':'x','✕':'x','✖':'x','🚫':'ban',
+  '→':'arrowR','←':'arrowL','↑':'arrowU','↓':'arrowD','⬇':'download','⬆':'upload','📤':'upload','➤':'send','📨':'send',
+  '🔔':'bell','🔕':'bellOff','📍':'pin','📞':'phone','📱':'mobile','📲':'mobile','☎':'phone',
+  '✨':'sparkle','🌟':'sparkle','⭐':'starFill','★':'starFill','☆':'star','🛒':'cart','🛍':'bag','👋':'hand','💬':'chat',
+  '🏷':'tag','💜':'heart','💗':'heart','♡':'heart','♥':'heart','❤':'heart','💔':'heartBreak',
+  '🕐':'clock','🕑':'clock','🕒':'clock','⏰':'alarm','⏳':'hourglass','⌛':'hourglass','🗓':'calendar','📅':'calendar',
+  '🔒':'lock','🔐':'lock','🔑':'key','🧸':'teddy','🗑':'trash','🏬':'store','🏪':'store','✉':'mail','📧':'mail','📬':'mail','📩':'mail',
+  '🔥':'flame','🚚':'truck','🛵':'scooter','🚗':'car','🎉':'party','🎊':'party','📦':'box','↩':'undo','🔁':'repeat','↺':'rotate','🔄':'rotate',
+  '🎁':'gift','🎒':'backpack','✏':'pencil','🖊':'pencil','✍':'pencil','🖍':'crayon','🎤':'mic','📷':'camera','📸':'camera',
+  '😴':'faceSleep','🥺':'faceSad','😕':'faceSad','😊':'faceSmile','🙈':'eyeOff','👀':'eyes','👁':'eye','👍':'thumb',
+  '📓':'book','📔':'book','📒':'book','📘':'book','📕':'book','📗':'book','📚':'book','📁':'folder','📂':'folder',
+  '🎨':'palette','🖌':'brush','🧩':'puzzle','🔍':'search','🔎':'search','🖨':'printer','🔗':'link','🎬':'clapper','👤':'user',
+  '🖼':'image','💳':'card','📎':'clip','🍫':'candy','🍬':'candy','🧼':'soap','📐':'triangle','🔪':'scissors','✂':'scissors',
+  '💃':'sparkle','🎲':'dice','🧱':'bricks','📡':'antenna','📈':'trend','📊':'chart','🛡':'shield','🧰':'toolbox','🐦':'bird',
+  '🎯':'target','🧹':'broom','🚪':'door','🎟':'ticket','💰':'money','💸':'money','📣':'megaphone','📢':'megaphone',
+  '🟢':'dotG','🔴':'dotR','💵':'money','🧭':'compass','📝':'note','📭':'inbox','🏁':'flag','↻':'rotate'
+};
+const EI_RE = /(?:\p{Extended_Pictographic}|[→←↑↓✓✕✖★☆♡♥✔↻])(?:️|‍\p{Extended_Pictographic}️?)*️?/gu;
+const EI_STRIP = /(?:\p{Extended_Pictographic}|[✓✕✖★☆♡♥✔])️?\s?/gu;
+
+const EI_HTML={};Object.keys(EI_SRC).forEach(k=>{EI_HTML[k]=EI_SRC[k].replace(/<(path|circle|rect|ellipse)\b/g,'<$1 pathLength="1"')});
+function eiNode(name){const t=document.createElement('template');t.innerHTML='<svg class="ei ei-'+name+'" viewBox="0 0 24 24" role="img" aria-label="'+name+'" focusable="false">'+EI_HTML[name]+'</svg>';return t.content.firstChild}
+const EI_SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,OPTION:1,TITLE:1,INPUT:1};
+function eiWalk(root){
+  const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>(n.parentNode&&!EI_SKIP[n.parentNode.nodeName]&&/\p{Extended_Pictographic}|[→←↑↓✓✕✖★☆♡♥✔↻]/u.test(n.nodeValue))?1:2});
+  const list=[];while(w.nextNode())list.push(w.currentNode);
+  list.forEach(n=>{const str=n.nodeValue;EI_RE.lastIndex=0;let last=0,m,frag=null;
+    while((m=EI_RE.exec(str))){const base=m[0].replace(/\uFE0F/g,'');const name=EI_MAP[base]||EI_MAP[Array.from(base)[0]];if(!name)continue;
+      if(!frag)frag=document.createDocumentFragment();if(m.index>last)frag.appendChild(document.createTextNode(str.slice(last,m.index)));
+      frag.appendChild(eiNode(name));last=m.index+m[0].length}
+    if(!frag)return;if(last<str.length)frag.appendChild(document.createTextNode(str.slice(last).replace(/^\s+/,' ')));
+    n.parentNode.replaceChild(frag,n)});
+}
+let eiT=null;
+function eiRun(){eiWalk(document.body)}
+new MutationObserver(()=>{if(eiT)return;eiT=setTimeout(()=>{eiT=null;eiRun()},30)}).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
+if(document.readyState!=='loading')eiRun();else document.addEventListener('DOMContentLoaded',eiRun);
+</script>
 </body>
 </html>
