@@ -1,9 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F7F0E4">
 <title>Meraki Stationery &amp; Toys | Jaipur</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=DM+Sans:wght@400;500;600;700&display=swap">
-<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"></script>
+
 <style id="css">
 /* Layout concept: hash-routed toys and stationery store with ink outlines, hard shadows and floating illustrations. */
 :root{
@@ -2020,7 +2026,7 @@ $('app').addEventListener('input',onInput);
 $('app').addEventListener('change',onChange);
 $('app').addEventListener('toggle',function(e){var d=e.target;if(d&&d.getAttribute&&d.getAttribute('data-open')){ui.open[d.getAttribute('data-open')]=d.open}},true);
 W.addEventListener('hashchange',function(){renderAll(true)});
-if(!reduce&&W.Lenis){try{lenis=new W.Lenis({lerp:.09,smoothWheel:true})}catch(e){lenis=null}}
+lenis=null;
 if(fine){D.addEventListener('pointermove',onMove,{passive:true});D.addEventListener('pointerleave',function(){curOn=false;if(cur)cur.classList.remove('on')})}
 W.addEventListener('resize',function(){layoutMotion()});
 W.addEventListener('load',layoutMotion);
